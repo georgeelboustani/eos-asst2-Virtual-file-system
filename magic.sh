@@ -1,4 +1,6 @@
 ./configure
+bmake
+bmake install
 cd kern/conf
 ./config ASST2
 cd ../compile/ASST2
