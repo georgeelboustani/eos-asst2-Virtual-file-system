@@ -106,12 +106,15 @@ syscall(struct trapframe *tf)
 		break;
 
 	    case SYS_open:
-		    val = open((const char*)tf->tf_a0, (int)tf->tf_a1);
-		    if (val.errno != NO_ERROR) {
-			    err = val.errno;
+		    val = myopen((const char*)tf->tf_a0, (int)tf->tf_a1);
+		    err = val.errno;
+
+		    if (val.errno == NO_ERROR) {
+			    retval = (int) val.val;
 		    } else {
-			    retval = (int) val.retval;
+		    	retval = -1;
 		    }
+	    	kprintf("FUCKING OPEN");
 		    break;
 
 	    case SYS___time:

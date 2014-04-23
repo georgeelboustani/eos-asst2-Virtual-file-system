@@ -4,6 +4,7 @@
 #include <kern/limits.h>
 #include <kern/stat.h>
 #include <kern/seek.h>
+#include <kern/unistd.h>
 #include <lib.h>
 #include <uio.h>
 #include <thread.h>
@@ -20,9 +21,6 @@
 #define FAILED -1
 #define FREE_FD -1
 #define NOT_OPEN -1
-#define STDOUT 0
-#define STDERR 1
-#define STDIN 2
 
 struct file_descriptor {
 	int fd;
@@ -48,17 +46,17 @@ int previous_open = FIRST_OPEN;
 /*
  * Add your file-related functions here ...
  */
-struct retval write(int fd, const void *buf, size_t nbytes) {
+struct retval mywrite(int fd, const void *buf, size_t nbytes) {
 	struct retval retval;
 	retval.errno = NO_ERROR;
-	retval.retval = (int*) 0;
+	retval.val = (int*) 0;
 	(void) fd;
 	(void) buf;
 	(void) nbytes;
 	return retval;
 }
 
-struct retval open(const char *filename, int flags) {
+struct retval myopen(const char *filename, int flags) {
 	init_tables();
 	struct retval retval;
 	retval.errno = NO_ERROR;
@@ -84,34 +82,34 @@ struct retval open(const char *filename, int flags) {
 
 	previous_fd = current_fd;
 
-	retval.retval = (int*) current_fd;
+	retval.val = (int*) current_fd;
 	return retval;
 }
 
-struct retval read(int fd, void *buf, size_t buflen) {
+struct retval myread(int fd, void *buf, size_t buflen) {
 	struct retval retval;
 	retval.errno = NO_ERROR;
-	retval.retval = (int*) 0;
+	retval.val = (int*) 0;
 	(void) fd;
 	(void) buf;
 	(void) buflen;
 	return retval;
 }
 
-struct retval lseek(int fd, off_t pos, int whence) {
+struct retval mylseek(int fd, off_t pos, int whence) {
 	struct retval retval;
 	retval.errno = NO_ERROR;
-	retval.retval = (off_t*) 0;
+	retval.val = (off_t*) 0;
 	(void) fd;
 	(void) pos;
 	(void) whence;
 	return retval;
 }
 
-struct retval close(int fd) {
+struct retval myclose(int fd) {
 	struct retval retval;
 	retval.errno = NO_ERROR;
-	retval.retval = (int*) 0;
+	retval.val = (int*) 0;
 //	if (fd < previous_fd) {
 //		set previous to be current.
 //	} else {
@@ -121,10 +119,10 @@ struct retval close(int fd) {
 	return retval;
 }
 
-struct retval dup2(int oldfd, int newfd) {
+struct retval mydup2(int oldfd, int newfd) {
 	struct retval retval;
 	retval.errno = NO_ERROR;
-	retval.retval = (int*) 0;
+	retval.val = (int*) 0;
 	(void) oldfd;
 	(void) newfd;
 	return retval;
@@ -158,7 +156,7 @@ int get_next_open(int previous_open) {
 
 int file_is_open(const char* filename) {
 	int i = FIRST_OPEN;
-	//TODO: FIX PLS. GEORGE PLS.
+	//TODO: OTIMISE PLS. GEORGE PLS.
 	while(i < OPEN_MAX && !strcmp(filename, open_files[i].filename)) {
 		i++;
 	}
@@ -192,18 +190,18 @@ void init_tables(void) {
 		}
 
 		// Initialize STDOUT/STDERR/STDIN file descriptors
-		file_descriptors[STDOUT].fd = STDOUT;
-		file_descriptors[STDOUT].pos = 0;
-		file_descriptors[STDOUT].open_id = STDOUT;
+		file_descriptors[STDIN_FILENO].fd = STDIN_FILENO;
+		file_descriptors[STDIN_FILENO].pos = 0;
+		file_descriptors[STDIN_FILENO].open_id = STDIN_FILENO;
 
-		file_descriptors[STDERR].fd = STDERR;
-		file_descriptors[STDERR].pos = 0;
-		file_descriptors[STDERR].open_id = STDERR;
+		file_descriptors[STDOUT_FILENO].fd = STDOUT;
+		file_descriptors[STDOUT_FILENO].pos = 0;
+		file_descriptors[STDOUT_FILENO].open_id = STDOUT;
 
-		file_descriptors[STDIN].fd = STDIN;
-		file_descriptors[STDIN].pos = 0;
-		file_descriptors[STDIN].open_id = STDIN;
+		file_descriptors[STDERR_FILENO].fd = STDERR_FILENO;
+		file_descriptors[STDERR_FILENO].pos = 0;
+		file_descriptors[STDERR_FILENO].open_id = STDERR_FILENO;
 
-		previous_fd = STDIN;
+		previous_fd = STDERR_FILENO;
 	}
 }
