@@ -16,11 +16,8 @@
 #include <syscall.h>
 #include <copyinout.h>
 
-#define FIRST_FD 0
-#define FIRST_OPEN 0
 #define FAILED -1
 #define FREE_FD -1
-#define NOT_OPEN -1
 
 struct file_descriptor {
 	int fd;
@@ -34,15 +31,16 @@ struct open_file {
 	struct vnode* vnode;
 };
 
-int get_next_free(int previous_fd);
+int get_next_free_fd(int previous_fd);
 int get_next_open(int previous_open);
 int file_is_open(const char* filename);
 void init_tables(void);
 
-struct open_file* open_files;
-struct file_descriptor* file_descriptors;
-int previous_fd = FIRST_FD;
-int previous_open = FIRST_OPEN;
+int initialised = 0;
+struct open_file* open_files[OPEN_MAX];
+struct file_descriptor* file_descriptors[IOV_MAX];
+int previous_fd = 0;
+int previous_open = 0;
 /*
  * Add your file-related functions here ...
  */
@@ -56,28 +54,35 @@ struct retval mywrite(int fd, const void *buf, size_t nbytes) {
 	return retval;
 }
 
+// On error, result is -1 and sets the error
 struct retval myopen(const char *filename, int flags) {
 	init_tables();
 	struct retval retval;
 	retval.errno = NO_ERROR;
 
-	int current_fd = get_next_free(previous_fd);
+	int current_fd = get_next_free_fd(previous_fd);
 
 	int result;
 	int open_id = file_is_open(filename);
-	if (open_id != FAILED) {
-		file_descriptors[current_fd].fd = current_fd;
-		file_descriptors[current_fd].pos = 0;
-		file_descriptors[current_fd].open_id = open_id;
+	if (open_id > -1) {
+		file_descriptors[current_fd]->fd = current_fd;
+		file_descriptors[current_fd]->pos = 0;
+		file_descriptors[current_fd]->open_id = open_id;
 	} else {
 		struct vnode* vnode;
 
 		result = vfs_open((char *)filename, flags, 0, &vnode);
-		// Throw error;
+		// TODO - Throw error if needed;
 
-		file_descriptors[current_fd].fd = current_fd;
-		file_descriptors[current_fd].pos = 0;
- 		file_descriptors[current_fd].open_id = get_next_open(previous_open);
+		file_descriptors[current_fd]->fd = current_fd;
+		file_descriptors[current_fd]->pos = 0;
+
+		int open_id = get_next_open(previous_open);
+		if (open_id > -1) {
+ 			file_descriptors[current_fd]->open_id = open_id;
+		} else {
+			// TODO - throw error too many open
+		}
 	}
 
 	previous_fd = current_fd;
@@ -110,6 +115,7 @@ struct retval myclose(int fd) {
 	struct retval retval;
 	retval.errno = NO_ERROR;
 	retval.val = (int*) 0;
+//  update the lowest id to the one we just released
 //	if (fd < previous_fd) {
 //		set previous to be current.
 //	} else {
@@ -128,80 +134,84 @@ struct retval mydup2(int oldfd, int newfd) {
 	return retval;
 }
 
-int get_next_free(int previous_fd) {
+int get_next_free_fd(int previous_fd) {
 	int next_free = previous_fd;
-	while(next_free < IOV_MAX && file_descriptors[next_free].fd != FREE_FD) {
+
+	while(next_free < IOV_MAX) {
+		if (file_descriptors[next_free] == NULL) {
+			return next_free;
+		}
 		next_free++;
 	}
 
-	if (next_free == IOV_MAX) {
-		return FAILED;
-	}
-
-	return next_free;
+	return -1;
 }
 
 int get_next_open(int previous_open) {
 	int next_open = previous_open;
-	while(next_open < OPEN_MAX && open_files[next_open].id != NOT_OPEN) {
+	
+	while(next_open < OPEN_MAX) {
+		if (open_files[next_open] == NULL) {
+			return next_open;
+		}
 		next_open++;
 	}
 
-	if (next_open == OPEN_MAX) {
-		return FAILED;
-	}
-
-	return next_open;
+	return -1;
 }
 
 int file_is_open(const char* filename) {
-	int i = FIRST_OPEN;
+	int i = 0;
+	int found = 0;
 	//TODO: OTIMISE PLS. GEORGE PLS.
-	while(i < OPEN_MAX && !strcmp(filename, open_files[i].filename)) {
+	while(i < OPEN_MAX) {
+		if (open_files[i] != NULL && strcmp(filename, open_files[i]->filename)) {
+			return i;
+		}
 		i++;
 	}
 
-	if (i == OPEN_MAX) {
-		return FAILED;
-	}
-
-	return i;
+	return -1;
 }
 
 void init_tables(void) {
-	// TODO: Handle concurrency for open_files/file_descriptors.
-	if (open_files == NULL) {
-		open_files = kmalloc(sizeof(struct open_file*) * OPEN_MAX);
+	if (!initialised) {
+		// TODO: Handle concurrency for open_files/file_descriptors.
+		
+		// ---- Open Files ---- \\
 
-		int i = FIRST_OPEN;
+		int i = 0;
 		while (i < OPEN_MAX) {
-			open_files[i].id = NOT_OPEN;
+			open_files[i] = NULL;
 			i++;
 		}
-	}
 
-	if (file_descriptors == NULL) {
-		file_descriptors = kmalloc(sizeof(struct file_descriptor*) * IOV_MAX);
+		// ---- File Descriptors ---- \\
 
-		int i = FIRST_FD;
+		int i = 0;
 		while (i < IOV_MAX) {
-			file_descriptors[i].fd = FREE_FD;
+			file_descriptors[i] = NULL;
 			i++;
 		}
 
 		// Initialize STDOUT/STDERR/STDIN file descriptors
-		file_descriptors[STDIN_FILENO].fd = STDIN_FILENO;
-		file_descriptors[STDIN_FILENO].pos = 0;
-		file_descriptors[STDIN_FILENO].open_id = STDIN_FILENO;
+		file_descriptors[STDIN_FILENO] = kmalloc(sizeof(struct file_descriptor));
+		file_descriptors[STDIN_FILENO]->fd = STDIN_FILENO;
+		file_descriptors[STDIN_FILENO]->pos = 0;
+		file_descriptors[STDIN_FILENO]->open_id = STDIN_FILENO;
 
-		file_descriptors[STDOUT_FILENO].fd = STDOUT;
-		file_descriptors[STDOUT_FILENO].pos = 0;
-		file_descriptors[STDOUT_FILENO].open_id = STDOUT;
+		file_descriptors[STDOUT_FILENO] = kmalloc(sizeof(struct file_descriptor));
+		file_descriptors[STDOUT_FILENO]->fd = STDOUT_FILENO;
+		file_descriptors[STDOUT_FILENO]->pos = 0;
+		file_descriptors[STDOUT_FILENO]->open_id = STDOUT_FILENO;
 
-		file_descriptors[STDERR_FILENO].fd = STDERR_FILENO;
-		file_descriptors[STDERR_FILENO].pos = 0;
-		file_descriptors[STDERR_FILENO].open_id = STDERR_FILENO;
+		file_descriptors[STDERR_FILENO] = kmalloc(sizeof(struct file_descriptor));
+		file_descriptors[STDERR_FILENO]->fd = STDERR_FILENO;
+		file_descriptors[STDERR_FILENO]->pos = 0;
+		file_descriptors[STDERR_FILENO]->open_id = STDERR_FILENO;
 
 		previous_fd = STDERR_FILENO;
+
+		initialised = 1;
 	}
 }
