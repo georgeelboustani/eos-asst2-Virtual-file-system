@@ -178,7 +178,7 @@ void init_tables(void) {
 	if (!initialised) {
 		// TODO: Handle concurrency for open_files/file_descriptors.
 		
-		// ---- Open Files ---- \\
+		// ---- Open Files ----
 
 		int i = 0;
 		while (i < OPEN_MAX) {
@@ -186,7 +186,7 @@ void init_tables(void) {
 			i++;
 		}
 
-		// ---- File Descriptors ---- \\
+		// ---- File Descriptors ----
 
 		int i = 0;
 		while (i < IOV_MAX) {
