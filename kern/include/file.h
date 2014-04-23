@@ -9,11 +9,21 @@
  * Contains some file-related maximum length constants
  */
 #include <limits.h>
+#include <types.h>
 
 /*
  * Put your function declarations and data types here ...
  */
 #define NO_ERROR 0
+
+struct file_descriptor {
+	char* name;
+	int flags;
+	off_t offset;
+	int ref_count;
+	struct lock* lock;
+	struct vnode* vnode;
+};
 
 struct retval {
 	int errno;

@@ -39,6 +39,8 @@
 #include <array.h>
 #include <spinlock.h>
 #include <threadlist.h>
+#include <file.h>
+#include <synch.h>
 
 struct cpu;
 
@@ -106,6 +108,10 @@ struct thread {
 	 */
 
 	/* add more here as needed */
+
+	 struct file_descriptor* file_descriptors[OPEN_MAX];
+	 struct lock* fd_table_lock;
+	 int previous_fd;
 };
 
 /*

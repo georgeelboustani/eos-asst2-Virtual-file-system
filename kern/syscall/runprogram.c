@@ -44,6 +44,9 @@
 #include <vfs.h>
 #include <syscall.h>
 #include <test.h>
+#include <file.h>
+
+int initialise_std_fds(void);
 
 /*
  * Load program "progname" and start running it in usermode.
@@ -97,6 +100,11 @@ runprogram(char *progname)
 		return result;
 	}
 
+	result = initialise_std_fds();
+	if (result) {
+		return result;
+	}
+
 	/* Warp to user mode. */
 	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
 			  NULL /*userspace addr of environment*/,
@@ -107,3 +115,21 @@ runprogram(char *progname)
 	return EINVAL;
 }
 
+int initialise_std_fds(void) {
+	struct retval result = myopen("con:", O_RDONLY);
+	if (result.errno != NO_ERROR) {
+		return result.errno;
+	}
+
+	result = myopen("con:", O_WRONLY);
+	if (result.errno != NO_ERROR) {
+		return result.errno;
+	}
+
+	result = myopen("con:", O_WRONLY);
+	if (result.errno != NO_ERROR) {
+		return result.errno;
+	}
+
+	return 0;
+}

@@ -99,7 +99,6 @@ syscall(struct trapframe *tf)
 	 */
 
 	retval = 0;
-
 	switch (callno) {
 	    case SYS_reboot:
 		err = sys_reboot(tf->tf_a0);
@@ -114,7 +113,16 @@ syscall(struct trapframe *tf)
 		    } else {
 		    	retval = -1;
 		    }
-	    	kprintf("FUCKING OPEN");
+		    break;
+		case SYS_close:
+		    val = myclose((int)tf->tf_a0);
+		    err = val.errno;
+
+		    if (val.errno == NO_ERROR) {
+			    retval = (int) val.val;
+		    } else {
+		    	retval = -1;
+		    }
 		    break;
 
 	    case SYS___time:

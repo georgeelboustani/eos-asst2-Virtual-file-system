@@ -76,6 +76,8 @@ static struct wchanarray allwchans;
 /* Used to wait for secondary CPUs to come online. */
 static struct semaphore *cpu_startup_sem;
 
+int initialise_fd_table(struct thread* thread);
+
 ////////////////////////////////////////////////////////////
 
 /*
@@ -155,7 +157,30 @@ thread_create(const char *name)
 
 	/* If you add to struct thread, be sure to initialize here */
 
+	int result = initialise_fd_table(thread);
+	if (!result) {
+		kfree(thread->t_name);
+		kfree(thread);
+		return NULL;
+	}
+
 	return thread;
+}
+
+int initialise_fd_table(struct thread* thread) {
+	int i = 0;
+	while (i < OPEN_MAX) {
+		thread->file_descriptors[i] = NULL;
+		i++;
+	}
+
+	thread->fd_table_lock = lock_create("fd table lock");
+	if (thread->fd_table_lock == NULL) {
+		return 0;
+	}
+
+	thread->previous_fd = 0;
+	return 1;
 }
 
 /*
@@ -250,6 +275,19 @@ thread_destroy(struct thread *thread)
 	 * If you add things to struct thread, be sure to clean them up
 	 * either here or in thread_exit(). (And not both...)
 	 */
+
+	lock_destroy(thread->fd_table_lock); 
+	int i = 0;
+	while (i < OPEN_MAX) {
+		struct file_descriptor* fd = thread->file_descriptors[i];
+		if (fd != NULL) {
+			myclose(i);
+			lock_destroy(fd->lock);
+			kfree(fd);
+			thread->file_descriptors[i] = NULL;
+		}
+		i++;
+	}
 
 	/* Thread subsystem fields */
 	KASSERT(thread->t_proc == NULL);
