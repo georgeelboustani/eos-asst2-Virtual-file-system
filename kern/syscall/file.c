@@ -162,7 +162,6 @@ int get_next_open(int previous_open) {
 
 int file_is_open(const char* filename) {
 	int i = 0;
-	int found = 0;
 	//TODO: OTIMISE PLS. GEORGE PLS.
 	while(i < OPEN_MAX) {
 		if (open_files[i] != NULL && strcmp(filename, open_files[i]->filename)) {
@@ -188,7 +187,7 @@ void init_tables(void) {
 
 		// ---- File Descriptors ----
 
-		int i = 0;
+		i = 0;
 		while (i < IOV_MAX) {
 			file_descriptors[i] = NULL;
 			i++;
