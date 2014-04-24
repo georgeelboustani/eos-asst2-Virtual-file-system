@@ -46,7 +46,8 @@
 #include <test.h>
 #include <file.h>
 
-int initialise_std_fds(void);
+int initialise_std_fds(struct thread *curthread);
+int open_console_file(struct thread *curthread, int fd_id, int flags);
 
 /*
  * Load program "progname" and start running it in usermode.
@@ -100,11 +101,11 @@ runprogram(char *progname)
 		return result;
 	}
 
-	result = initialise_std_fds();
+	result = initialise_std_fds(curthread);
 	if (result) {
 		return result;
 	}
-
+	kprintf("Initialised std fds\n");
 	/* Warp to user mode. */
 	enter_new_process(0 /*argc*/, NULL /*userspace addr of argv*/,
 			  NULL /*userspace addr of environment*/,
@@ -115,21 +116,42 @@ runprogram(char *progname)
 	return EINVAL;
 }
 
-int initialise_std_fds(void) {
-	struct retval result = myopen("con:", O_RDONLY);
-	if (result.errno != NO_ERROR) {
-		return result.errno;
+int initialise_std_fds(struct thread *curthread) {
+	int result = 0;
+	result = open_console_file(curthread, 0, O_RDONLY);
+	if (result != 0) {
+		return result;
 	}
+	result = open_console_file(curthread, 1, O_WRONLY);
+	if (result != 0) {
+		return result;
+	}
+	result = open_console_file(curthread, 2, O_WRONLY);
+	if (result != 0) {
+		return result;
+	}
+	return 0;
+}
 
-	result = myopen("con:", O_WRONLY);
-	if (result.errno != NO_ERROR) {
-		return result.errno;
-	}
+int open_console_file(struct thread *curthread, int fd_id, int flags) {
+	int result;
+	struct vnode *vn;	
+	struct file_descriptor *fd = (struct file_descriptor *) kmalloc(sizeof(struct file_descriptor));
+	curthread->file_descriptors[fd_id] = fd;
+	char console[] = "con:";
 
-	result = myopen("con:", O_WRONLY);
-	if (result.errno != NO_ERROR) {
-		return result.errno;
+	result = vfs_open(console, flags, 0664, &vn);
+	
+	if(result){
+		kprintf("fdesc_init failed\n");
+		kfree(console);
+		return result;
 	}
+	
+	fd->vnode = vn;
+	fd->flags = flags;
+	fd->offset = 0;	
+	fd->lock = lock_create(console);
 
 	return 0;
 }

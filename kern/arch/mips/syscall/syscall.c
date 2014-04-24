@@ -105,7 +105,7 @@ syscall(struct trapframe *tf)
 		break;
 
 	    case SYS_open:
-		    val = myopen((const char*)tf->tf_a0, (int)tf->tf_a1);
+		    val = myopen((const_userptr_t)tf->tf_a0, (int)tf->tf_a1);
 		    err = val.errno;
 
 		    if (val.errno == NO_ERROR) {
@@ -116,6 +116,16 @@ syscall(struct trapframe *tf)
 		    break;
 		case SYS_close:
 		    val = myclose((int)tf->tf_a0);
+		    err = val.errno;
+
+		    if (val.errno == NO_ERROR) {
+			    retval = (int) val.val;
+		    } else {
+		    	retval = -1;
+		    }
+		    break;
+		case SYS_write:
+		    val = mywrite(tf->tf_a0, (void*)tf->tf_a1, tf->tf_a2);
 		    err = val.errno;
 
 		    if (val.errno == NO_ERROR) {

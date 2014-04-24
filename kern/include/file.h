@@ -30,8 +30,8 @@ struct retval {
 	void* val;
 };
 
-struct retval mywrite(int fd, const void *buf, size_t nbytes);
-struct retval myopen(const char *filename, int flags);
+struct retval mywrite(int fd, void *buf, size_t nbytes);
+struct retval myopen(const_userptr_t filename, int flags);
 struct retval myread(int fd, void *buf, size_t buflen);
 struct retval mylseek(int fd, off_t pos, int whence);
 struct retval myclose(int fd);
