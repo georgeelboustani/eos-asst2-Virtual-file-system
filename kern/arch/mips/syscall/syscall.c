@@ -158,6 +158,14 @@ syscall(struct trapframe *tf)
 
 			break;
 
+		case SYS_dup2:
+			val = mydup2((int) tf->tf_a0, (int) tf->tf_a1);
+			err = val.errno;
+			if (val.errno == NO_ERROR) {
+				retval_h = (int) val.val_h;
+			}
+			break;
+
 		case SYS___time:
 		        err = sys___time((userptr_t)tf->tf_a0,
 				 (userptr_t)tf->tf_a1);

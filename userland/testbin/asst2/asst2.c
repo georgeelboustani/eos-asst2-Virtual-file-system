@@ -10,6 +10,7 @@
 #define MAX_BUF 500
 char teststr[] = "The quick brown fox jumped over the lazy dog.";
 char buf[MAX_BUF];
+char newbuf[MAX_BUF];
 
 int
 main(int argc, char * argv[])
@@ -119,12 +120,80 @@ main(int argc, char * argv[])
 	} while (k < 5);
 
 	printf("* file lseek  okay\n");
-	printf("* closing file\n");  
-	close(fd);
 
 	/* Duping */
-	printf("**********\n* testing dup2\n");
-	r = dup2();
+	printf("**********\n* testing dup2 with new fd\n");
+	int unused_fd = 15;
+	r = dup2(fd, unused_fd);
+	if (r == 15) {
+		printf("* reading 10 bytes of original file into buffer \n");
+		i = 0;
+		do  {
+			printf("* attemping read of %d bytes\n", 10 - i );
+			r = read(fd, &buf[i], 10 - i);
+			printf("* read %d bytes\n", r);
+			i += r;
+		} while (i < 10 && r > 0);
+		printf("* reading 10 bytes of new file into buffer \n");
+		i = 0;
+		do  {
+			printf("* attemping read of %d bytes\n", 10 - i );
+			r = read(unused_fd, &newbuf[i], 10 - i);
+			printf("* read %d bytes\n", r);
+			i += r;
+		} while (i < 10 && r > 0);
+		i = 0;
+		while (i < 10) {
+			if (buf[i] == newbuf[i]) {
+				printf("* data at %d is the same: %c\n", i, buf[i]);
+			} else {
+				printf("ERROR data at %d is different\n", i);
+				printf("buf[%d] = %c compared to newbuf[%d] = %c\n", i, buf[i], i, newbuf[i]);
+			}
+			i++;
+		}
+	} else {
+		printf("ERROR dup2 failed, return fd: %d is different from parameter: %d\n", r, unused_fd);
+	}
+
+	printf("**********\n* testing dup2 with existing fd\n");
+	int used_fd = 15;
+	r = dup2(fd, used_fd);
+	if (r == 15) {
+		printf("* reading 10 bytes of original file into buffer \n");
+		i = 0;
+		do  {
+			printf("* attemping read of %d bytes\n", 10 - i );
+			r = read(fd, &buf[i], 10 - i);
+			printf("* read %d bytes\n", r);
+			i += r;
+		} while (i < 10 && r > 0);
+		printf("* reading 10 bytes of new file into buffer \n");
+		i = 0;
+		do  {
+			printf("* attemping read of %d bytes\n", 10 - i );
+			r = read(used_fd, &newbuf[i], 10 - i);
+			printf("* read %d bytes\n", r);
+			i += r;
+		} while (i < 10 && r > 0);
+		i = 0;
+		while (i < 10) {
+			if (buf[i] == newbuf[i]) {
+				printf("* data at %d is the same: %c\n", i, buf[i]);
+			} else {
+				printf("ERROR data at %d is different\n", i);
+				printf("buf[%d] = %c compared to newbuf[%d] = %c\n", i, buf[i], i, newbuf[i]);
+			}
+			i++;
+		}
+	} else {
+		printf("ERROR dup2 failed, return fd: %d is different from parameter: %d\n", r, used_fd);
+	}
+
+	printf("* dup2() success! YOU ARE AWESOME! *gay nerd chills*\n");
+
+	printf("* closing file\n");
+	close(fd);
 
 	/* Forking */
 	printf("**********\n* testing fork\n");
