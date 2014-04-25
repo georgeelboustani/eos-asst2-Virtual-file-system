@@ -30,7 +30,7 @@ struct retval mywrite(int fd_id, void* buf, size_t nbytes) {
 	retval.val = (int*) 0;
 	struct file_descriptor* fd = curthread->file_descriptors[fd_id];
 
-	// TODO - handle errors and 
+	// TODO - handle errors and
 
 	lock_acquire(fd->lock);
 
