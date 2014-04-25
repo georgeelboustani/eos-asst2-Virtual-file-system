@@ -36,8 +36,9 @@
 #include <current.h>
 #include <syscall.h>
 #include <file.h>
-#include <fork.h>
 #include <copyinout.h>
+#include <proc.h>
+#include <addrspace.h>
 
 /*
  * System call dispatcher.
@@ -225,7 +226,23 @@ syscall(struct trapframe *tf)
  * Thus, you can trash it and do things another way if you prefer.
  */
 void
-enter_forked_process(struct trapframe *tf)
+enter_forked_process(void *data1, unsigned long data2)
 {
-	(void)tf;
+	struct trapframe *tf = (struct trapframe*) data1;
+	struct addrspace *as = (struct addrspace*) data2;
+	(void)as;
+	// TODO - do we need to set as????????
+	//curthread->t_proc->p_addrspace = as;
+	as_activate();
+
+	tf->tf_v0 = 0;
+	tf->tf_v1 = 0;
+	tf->tf_a3 = 0;
+
+	tf->tf_epc += 4;
+
+	struct trapframe new_tf;
+	memcpy(&new_tf, tf, sizeof(struct trapframe));
+
+	mips_usermode(&new_tf);
 }

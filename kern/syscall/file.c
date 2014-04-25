@@ -59,6 +59,7 @@ struct retval mywrite(int fd_id, void* buf, size_t nbytes) {
 
 	int err = VOP_WRITE(fd->vnode, &uio_writer);
 	if (err) {
+		lock_release(fd->lock);
 		retval.errno = err;
 		return retval;
 	}

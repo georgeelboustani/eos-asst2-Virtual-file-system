@@ -572,6 +572,35 @@ thread_fork(const char *name,
 	 */
 	newthread->t_iplhigh_count++;
 
+	// *****************************
+	// MAKING A COPY OF THE FD TABLE
+	// *****************************
+
+	newthread->previous_fd = curthread->previous_fd;
+
+	int i = 0;
+	while (i < OPEN_MAX) {
+		if (curthread->file_descriptors[i] != NULL) {
+			struct file_descriptor *old_fd = curthread->file_descriptors[i];
+			struct file_descriptor *new_fd = (struct file_descriptor*) kmalloc(sizeof(struct file_descriptor));
+
+			new_fd->name = old_fd->name;
+			new_fd->ref_count = old_fd->ref_count;
+			new_fd->flags = old_fd->ref_count;
+			new_fd->offset = old_fd->offset;
+			new_fd->vnode = old_fd->vnode;
+			new_fd->lock = lock_create("lock_" + i);
+
+			newthread->file_descriptors[i] = new_fd;
+		}
+
+		i++;
+	}
+
+	// *********************************
+	// FIN MAKING A COPY OF THE FD TABLE
+	// *********************************
+
 	/* Set up the switchframe so entrypoint() gets called */
 	switchframe_init(newthread, entrypoint, data1, data2);
 

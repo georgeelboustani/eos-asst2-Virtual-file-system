@@ -38,5 +38,7 @@ struct retval mylseek(int fd, off_t pos, int whence);
 struct retval myclose(int fd);
 struct retval mydup2(int oldfd, int newfd);
 
+struct trapframe;
+struct retval myfork(struct trapframe *tf);
 
 #endif /* _FILE_H_ */
