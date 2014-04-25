@@ -122,6 +122,10 @@ main(int argc, char * argv[])
 	printf("* closing file\n");  
 	close(fd);
 
+	/* Duping */
+	printf("**********\n* testing dup2\n");
+	r = dup2();
+
 	/* Forking */
 	printf("**********\n* testing fork\n");
 

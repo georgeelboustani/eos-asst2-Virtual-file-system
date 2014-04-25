@@ -150,6 +150,7 @@ syscall(struct trapframe *tf)
 			pos = ((off_t) tf->tf_a2 << 32) | ((off_t) tf->tf_a3);
 			copyin((const_userptr_t)tf->tf_sp+16, &whence, sizeof(int));
 			val = mylseek(tf->tf_a0, pos, whence);
+			err = val.errno;
 			if (val.errno == NO_ERROR) {
 				retval_h = (int) val.val_h;
 				retval_l = (int) val.val_l;

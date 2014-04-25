@@ -165,7 +165,17 @@ struct retval mylseek(int fd_id, off_t pos, int whence) {
 	retval.val_h = (int*) -1;
 	retval.val_l = (int*) -1;
 
+	if (fd_id < 0 || fd_id >= OPEN_MAX) {
+		retval.errno = EBADF;
+		return retval;
+	}
+
 	struct file_descriptor* fd = curthread->file_descriptors[fd_id];
+
+	if (fd == NULL) {
+		retval.errno = EBADF;
+		return retval;
+	}
 
 	lock_acquire(fd->lock);
 	if (whence == SEEK_SET) {
@@ -208,7 +218,8 @@ struct retval mylseek(int fd_id, off_t pos, int whence) {
 		retval.val_h = (int*) high;
 		retval.val_l = (int*) low;
 	} else {
-		//throw error.
+		retval.errno = EINVAL;
+		return retval;
 	}
 	lock_release(fd->lock);
 
@@ -254,12 +265,43 @@ struct retval myclose(int fd_id) {
 	return retval;
 }
 
-struct retval mydup2(int oldfd, int newfd) {
+struct retval mydup2(int oldfd_id, int newfd_id) {
 	struct retval retval;
 	retval.errno = NO_ERROR;
-	retval.val_h = (int*) 0;
-	(void) oldfd;
-	(void) newfd;
+	retval.val_h = (int*) -1;
+
+	if (oldfd_id < 0 || newfd_id < 0 || oldfd_id >= OPEN_MAX || newfd_id >= OPEN_MAX) {
+		retval.errno = EBADF;
+		return retval;
+	}
+
+	struct file_descriptor *fd = curthread->file_descriptor[oldfd_id];
+	lock_acquire(fd->lock);
+	if (fd != NULL) {
+		// copy shit
+		struct file_descriptor *new_fd = curthread->file_descriptor[newfd_id];
+		if (new_fd == NULL) {
+			new_fd->flags = fd->flags;
+			new_fd->lock = lock_create(newfd_id);
+			new_fd->name = fd->name;
+			new_fd->offset = fd->offset;
+			new_fd->ref_count = 1;
+			new_fd->vnode = fd->vnode;
+			retval.val_h = (int*) newfd_id;
+		} else {
+			struct retval result = myclose(newfd_id);
+			if (retval.errno != NO_ERROR) {
+				lock_release(fd->lock);
+				return retval;
+			}
+		}
+	} else {
+		lock_release(fd->lock);
+		retval.errno = EBADF;
+		return retval;
+	}
+	lock_release(fd->lock);
+
 	return retval;
 }
 
