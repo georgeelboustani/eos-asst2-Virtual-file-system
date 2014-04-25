@@ -36,6 +36,7 @@
 #include <current.h>
 #include <syscall.h>
 #include <file.h>
+#include <fork.h>
 #include <copyinout.h>
 
 /*
@@ -163,6 +164,14 @@ syscall(struct trapframe *tf)
 			err = val.errno;
 			if (val.errno == NO_ERROR) {
 				retval_h = (int) val.val_h;
+			}
+			break;
+
+		case SYS_fork:
+			val = myfork(tf);
+			err = val.errno;
+			if (val.errno == NO_ERROR) {
+				retval_h = (pid_t) val.val_h;
 			}
 			break;
 
