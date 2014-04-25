@@ -27,7 +27,9 @@ int get_next_free_fd(void);
 struct retval mywrite(int fd_id, void* buf, size_t nbytes) {
 	struct retval retval;
 	retval.errno = NO_ERROR;
-	retval.val = (int*) 0;
+	retval.val_h = (int*) -1;
+	retval.val_l = (int*) -1;
+
 	struct file_descriptor* fd = curthread->file_descriptors[fd_id];
 
 	// TODO - handle errors and
@@ -39,7 +41,7 @@ struct retval mywrite(int fd_id, void* buf, size_t nbytes) {
 	
 	size_t length;
 	char *buffer = (char*)kmalloc(nbytes);
-	copyinstr((userptr_t)buf, buffer, strlen(buffer), &length);
+	copyinstr((userptr_t)buf, buffer, nbytes, &length);
 
 	uio_kinit(&iov, &uio_writer, (void*) buffer, nbytes, fd->offset, UIO_WRITE);
 	// TODO - Not allowed on directories or symlinks.
@@ -49,12 +51,13 @@ struct retval mywrite(int fd_id, void* buf, size_t nbytes) {
 	if (err) {
 		// TODO how do we handle this
 		kprintf("%s: Write error: %s\n", fd->name, strerror(err));
-		retval.val = (int*)-1;
+		retval.val_h = (int*)-1;
 	}
 	fd->offset = uio_writer.uio_offset;
-	retval.val = (void*)(nbytes - uio_writer.uio_resid);
+	retval.val_h = (void*)(nbytes - uio_writer.uio_resid);
 	kfree(buffer);
 	lock_release(fd->lock);
+
 	return retval;
 }
 
@@ -64,13 +67,16 @@ struct retval myopen(const_userptr_t filename, int flags) {
 	struct retval retval;
 	struct vnode* vn;
 	retval.errno = NO_ERROR;
-	retval.val = (int*) -1;
+	retval.val_h = (int*) -1;
+	retval.val_l = (int*) -1;
 
 	char *sys_filename = (char*)kmalloc(sizeof(char)*PATH_MAX);
 	if(sys_filename == NULL) {
 		retval.errno = ENOMEM;
 		return retval;
 	}
+
+	// TODO: CHECK FOR 0_APPEND FLAG PLS. Offset = file_size i.e. VOP_STAT
 
 	copyinstr(filename, sys_filename, PATH_MAX, &length);
 
@@ -104,7 +110,7 @@ struct retval myopen(const_userptr_t filename, int flags) {
 		fd->vnode = vn;
 
 		if (result == 0) {
-			retval.val = (int*) current_fd;
+			retval.val_h = (int*) current_fd;
 		} else {
 			// TODO - Throw error if needed; and remove the file descriptor from the array
 			// retval.errno = 
@@ -116,30 +122,114 @@ struct retval myopen(const_userptr_t filename, int flags) {
 	return retval;
 }
 
-struct retval myread(int fd, void *buf, size_t buflen) {
+struct retval myread(int fd_id, void *buf, size_t nbytes) {
 	struct retval retval;
 	retval.errno = NO_ERROR;
-	retval.val = (int*) 0;
-	(void) fd;
-	(void) buf;
-	(void) buflen;
+	retval.val_h = (int*) -1;
+	retval.val_l = (int*) -1;
+
+	struct file_descriptor* fd = curthread->file_descriptors[fd_id];
+
+	// TODO - handle errors and
+
+	lock_acquire(fd->lock);
+
+	struct iovec iov;
+	struct uio uio_reader;
+	char *buffer = (char*)kmalloc(nbytes);
+
+	uio_kinit(&iov, &uio_reader, (void*) buffer, nbytes, fd->offset, UIO_READ);
+	// TODO - Not allowed on directories or symlinks.
+
+	int err = VOP_READ(fd->vnode, &uio_reader);
+
+	size_t length;
+	copyoutstr(buffer, (userptr_t)buf, nbytes, &length);
+
+	if (err) {
+		// TODO how do we handle this
+		kprintf("%s: Write error: %s\n", fd->name, strerror(err));
+		retval.val_h = (int*)-1;
+	}
+	fd->offset = uio_reader.uio_offset;
+	retval.val_h = (void*)(nbytes - uio_reader.uio_resid);
+	kfree(buffer);
+	lock_release(fd->lock);
+
 	return retval;
 }
 
-struct retval mylseek(int fd, off_t pos, int whence) {
+struct retval mylseek(int fd_id, off_t pos, int whence) {
 	struct retval retval;
 	retval.errno = NO_ERROR;
-	retval.val = (off_t*) 0;
-	(void) fd;
-	(void) pos;
-	(void) whence;
+	retval.val_h = (int*) -1;
+	retval.val_l = (int*) -1;
+
+	if (fd_id < 0 || fd_id >= OPEN_MAX) {
+		retval.errno = EBADF;
+		return retval;
+	}
+
+	struct file_descriptor* fd = curthread->file_descriptors[fd_id];
+
+	if (fd == NULL) {
+		retval.errno = EBADF;
+		return retval;
+	}
+
+	lock_acquire(fd->lock);
+	if (whence == SEEK_SET) {
+		fd->offset = pos;
+
+		off_t word = fd->offset;
+		long temp = ((word >> 32) << 32);
+		int low = (int)(word - temp);
+
+		word = fd->offset;
+		int high = (int)(word >> 32);
+
+		retval.val_h = (int*) high;
+		retval.val_l = (int*) low;
+	} else if (whence == SEEK_CUR) {
+		fd->offset += pos;
+
+		off_t word = fd->offset;
+		long temp = ((word >> 32) << 32);
+		int low = (int)(word - temp);
+
+		word = fd->offset;
+		int high = (int)(word >> 32);
+
+		retval.val_h = (int*) high;
+		retval.val_l = (int*) low;
+	} else if (whence == SEEK_END) {
+		struct stat stat_buffer;
+		VOP_STAT(fd->vnode, &stat_buffer);
+
+		fd->offset = stat_buffer.st_size + pos;
+
+		off_t word = fd->offset;
+		long temp = ((word >> 32) << 32);
+		int low = (int)(word - temp);
+
+		word = fd->offset;
+		int high = (int)(word >> 32);
+
+		retval.val_h = (int*) high;
+		retval.val_l = (int*) low;
+	} else {
+		retval.errno = EINVAL;
+		return retval;
+	}
+	lock_release(fd->lock);
+
 	return retval;
 }
 
 struct retval myclose(int fd_id) {
 	struct retval retval;
 	retval.errno = NO_ERROR;
-	retval.val = (int*) -1;
+	retval.val_h = (int*) -1;
 
 	if (fd_id < 0 || fd_id >= OPEN_MAX) {
 		retval.errno = EBADF;
@@ -175,12 +265,43 @@ struct retval myclose(int fd_id) {
 	return retval;
 }
 
-struct retval mydup2(int oldfd, int newfd) {
+struct retval mydup2(int oldfd_id, int newfd_id) {
 	struct retval retval;
 	retval.errno = NO_ERROR;
-	retval.val = (int*) 0;
-	(void) oldfd;
-	(void) newfd;
+	retval.val_h = (int*) -1;
+
+	if (oldfd_id < 0 || newfd_id < 0 || oldfd_id >= OPEN_MAX || newfd_id >= OPEN_MAX) {
+		retval.errno = EBADF;
+		return retval;
+	}
+
+	struct file_descriptor *fd = curthread->file_descriptor[oldfd_id];
+	lock_acquire(fd->lock);
+	if (fd != NULL) {
+		// copy shit
+		struct file_descriptor *new_fd = curthread->file_descriptor[newfd_id];
+		if (new_fd == NULL) {
+			new_fd->flags = fd->flags;
+			new_fd->lock = lock_create(newfd_id);
+			new_fd->name = fd->name;
+			new_fd->offset = fd->offset;
+			new_fd->ref_count = 1;
+			new_fd->vnode = fd->vnode;
+			retval.val_h = (int*) newfd_id;
+		} else {
+			struct retval result = myclose(newfd_id);
+			if (retval.errno != NO_ERROR) {
+				lock_release(fd->lock);
+				return retval;
+			}
+		}
+	} else {
+		lock_release(fd->lock);
+		retval.errno = EBADF;
+		return retval;
+	}
+	lock_release(fd->lock);
+
 	return retval;
 }
 

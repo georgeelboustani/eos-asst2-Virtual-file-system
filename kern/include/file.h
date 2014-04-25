@@ -27,7 +27,8 @@ struct file_descriptor {
 
 struct retval {
 	int errno;
-	void* val;
+	void* val_h;
+	void* val_l;
 };
 
 struct retval mywrite(int fd, void *buf, size_t nbytes);

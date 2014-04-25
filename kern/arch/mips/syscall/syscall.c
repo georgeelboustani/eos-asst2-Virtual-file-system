@@ -36,6 +36,7 @@
 #include <current.h>
 #include <syscall.h>
 #include <file.h>
+#include <copyinout.h>
 
 /*
  * System call dispatcher.
@@ -79,7 +80,8 @@ void
 syscall(struct trapframe *tf)
 {
 	int callno;
-	int32_t retval;
+	int32_t retval_h;
+	int32_t retval_l;
 	int err;
 	struct retval val;
 
@@ -98,54 +100,73 @@ syscall(struct trapframe *tf)
 	 * like write.
 	 */
 
-	retval = 0;
+	retval_h = 0;
+	retval_l = 0;
+	off_t pos = 0;
+	int whence;
 	switch (callno) {
-	    case SYS_reboot:
-		err = sys_reboot(tf->tf_a0);
+		case SYS_reboot:
+	        	err = sys_reboot(tf->tf_a0);
 		break;
 
-	    case SYS_open:
-		    val = myopen((const_userptr_t)tf->tf_a0, (int)tf->tf_a1);
-		    err = val.errno;
+	        case SYS_open:
+			val = myopen((const_userptr_t)tf->tf_a0, (int)tf->tf_a1);
+			err = val.errno;
 
-		    if (val.errno == NO_ERROR) {
-			    retval = (int) val.val;
-		    } else {
-		    	retval = -1;
-		    }
-		    break;
+			if (val.errno == NO_ERROR) {
+			    retval_h = (int) val.val_h;
+			}
+
+			break;
 		case SYS_close:
-		    val = myclose((int)tf->tf_a0);
-		    err = val.errno;
+			val = myclose((int)tf->tf_a0);
+			err = val.errno;
 
-		    if (val.errno == NO_ERROR) {
-			    retval = (int) val.val;
-		    } else {
-		    	retval = -1;
-		    }
-		    break;
+			if (val.errno == NO_ERROR) {
+				retval_h = (int) val.val_h;
+			}
+
+			break;
 		case SYS_write:
-		    val = mywrite(tf->tf_a0, (void*)tf->tf_a1, tf->tf_a2);
-		    err = val.errno;
+			val = mywrite(tf->tf_a0, (void*)tf->tf_a1, tf->tf_a2);
+			err = val.errno;
 
-		    if (val.errno == NO_ERROR) {
-			    retval = (int) val.val;
-		    } else {
-		    	retval = -1;
-		    }
-		    break;
+			if (val.errno == NO_ERROR) {
+				retval_h = (int) val.val_h;
+			}
 
-	    case SYS___time:
-		err = sys___time((userptr_t)tf->tf_a0,
+			break;
+
+		case SYS_read:
+			val = myread(tf->tf_a0, (void*)tf->tf_a1, tf->tf_a2);
+			err = val.errno;
+			if (val.errno == NO_ERROR) {
+				retval_h = (int) val.val_h;
+			}
+
+			break;
+
+		case SYS_lseek:
+			pos = ((off_t) tf->tf_a2 << 32) | ((off_t) tf->tf_a3);
+			copyin((const_userptr_t)tf->tf_sp+16, &whence, sizeof(int));
+			val = mylseek(tf->tf_a0, pos, whence);
+			err = val.errno;
+			if (val.errno == NO_ERROR) {
+				retval_h = (int) val.val_h;
+				retval_l = (int) val.val_l;
+			}
+
+			break;
+
+		case SYS___time:
+		        err = sys___time((userptr_t)tf->tf_a0,
 				 (userptr_t)tf->tf_a1);
-		break;
+			break;
 
-	    /* Add stuff here */
-
-	    default:
-		kprintf("Unknown syscall %d\n", callno);
-		err = ENOSYS;
-		break;
+		default:
+			kprintf("Unknown syscall %d\n", callno);
+			err = ENOSYS;
+			break;
 	}
 
 
@@ -160,7 +181,8 @@ syscall(struct trapframe *tf)
 	}
 	else {
 		/* Success. */
-		tf->tf_v0 = retval;
+		tf->tf_v0 = retval_h;
+		tf->tf_v1 = retval_l;
 		tf->tf_a3 = 0;      /* signal no error */
 	}
 

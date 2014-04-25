@@ -45,6 +45,7 @@
 #include <syscall.h>
 #include <test.h>
 #include <file.h>
+#include <kern/unistd.h>
 
 int initialise_std_fds(struct thread *curthread);
 int open_console_file(struct thread *curthread, int fd_id, int flags);
@@ -118,15 +119,15 @@ runprogram(char *progname)
 
 int initialise_std_fds(struct thread *curthread) {
 	int result = 0;
-	result = open_console_file(curthread, 0, O_RDONLY);
+	result = open_console_file(curthread, STDIN_FILENO, O_RDONLY);
 	if (result != 0) {
 		return result;
 	}
-	result = open_console_file(curthread, 1, O_WRONLY);
+	result = open_console_file(curthread, STDOUT_FILENO, O_WRONLY);
 	if (result != 0) {
 		return result;
 	}
-	result = open_console_file(curthread, 2, O_WRONLY);
+	result = open_console_file(curthread, STDERR_FILENO, O_WRONLY);
 	if (result != 0) {
 		return result;
 	}
@@ -142,9 +143,8 @@ int open_console_file(struct thread *curthread, int fd_id, int flags) {
 
 	result = vfs_open(console, flags, 0664, &vn);
 	
-	if(result){
-		kprintf("fdesc_init failed\n");
-		kfree(console);
+	if (result) {
+		kprintf("vfs_open failed with args %s, %d\n", console, flags);
 		return result;
 	}
 	
