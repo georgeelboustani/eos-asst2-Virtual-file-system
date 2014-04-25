@@ -18,6 +18,7 @@
 
 #define FAILED -1
 #define FREE_FD -1
+#define TWO_BITS 3
 
 int get_next_free_fd(void);
 
@@ -36,7 +37,7 @@ struct retval mywrite(int fd_id, void* buf, size_t nbytes) {
 		return retval;
 	}
 
-	if ((fd->flags & 3) == O_RDONLY) {
+	if ((fd->flags & TWO_BITS) == O_RDONLY) {
 		retval.errno = EACCES;
 		return retval;
 	}
@@ -79,7 +80,7 @@ struct retval myopen(const_userptr_t filename, int flags) {
 	retval.val_l = (int*) FAILED;
 	int flag_count = 0;
 
-	if ((flags & 3) == O_RDONLY) {
+	if ((flags & TWO_BITS) == O_RDONLY) {
 		flag_count++;
 	}
 
