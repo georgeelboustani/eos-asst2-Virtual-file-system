@@ -306,6 +306,7 @@ struct retval myclose(int fd_id) {
 		vfs_close(fd->vnode);
 		curthread->file_descriptors[fd_id] = NULL;
 		lock_release(fd->lock);
+		kfree(fd);
 
 		if (fd_id < curthread->previous_fd) {
 			curthread->previous_fd = fd_id;
