@@ -45,7 +45,6 @@ struct retval mywrite(int fd_id, void* buf, size_t nbytes) {
 		return retval;
 	}
 	
-	//size_t length;
 	char *buffer = (char*)kmalloc(nbytes);
 	if (buffer == NULL) {
 		retval.errno = ENOMEM;
@@ -59,6 +58,7 @@ struct retval mywrite(int fd_id, void* buf, size_t nbytes) {
 
 	uio_kinit(&iov, &uio_writer, (void*) buffer, nbytes, fd->offset, UIO_WRITE);
 	
+	//size_t length;	
 	int result = copyin((userptr_t)buf, buffer, nbytes);
 	if (result != NO_ERROR) {
 		lock_release(fd->lock);
@@ -72,7 +72,7 @@ struct retval mywrite(int fd_id, void* buf, size_t nbytes) {
 		retval.errno = err;
 		return retval;
 	}
-	fd->offset += (off_t)(nbytes - uio_writer.uio_resid);
+	fd->offset = uio_writer.uio_offset;
 	lock_release(fd->lock);
 
 	retval.val_h = (void*)(nbytes - uio_writer.uio_resid);
@@ -214,7 +214,7 @@ struct retval myread(int fd_id, void *buf, size_t nbytes) {
 		retval.errno = err;
 		return retval;
 	}
-	fd->offset += (off_t)(nbytes - uio_reader.uio_resid);
+	fd->offset = uio_reader.uio_offset;
 	retval.val_h = (void*)(nbytes - uio_reader.uio_resid);
 	
 	lock_release(fd->lock);

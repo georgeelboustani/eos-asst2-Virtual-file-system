@@ -10,6 +10,7 @@
 #include <copyinout.h>
 #include <proc.h>
 #include <addrspace.h>
+#include <spl.h>
 
 struct retval myfork(struct trapframe *tf) {
 	struct retval rv;
@@ -37,7 +38,7 @@ struct retval myfork(struct trapframe *tf) {
 		rv.errno = result;
 		return rv;
 	}
-
+	//int s =splhigh();
 	result = thread_fork(strcat(curthread->t_name, "_child"), new_proc, (void*)&enter_forked_process, (void *)new_tf, (unsigned long) curthread->t_proc->p_addrspace);
 	if (result) {
 		kfree(new_tf);
@@ -45,6 +46,7 @@ struct retval myfork(struct trapframe *tf) {
 		rv.errno = result;
 		return rv;
 	}
+	//splx(s);
 
 	// Parent returns 1
 	rv.val_h = (pid_t*)1;

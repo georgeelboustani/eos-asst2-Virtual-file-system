@@ -577,7 +577,6 @@ thread_fork(const char *name,
 	// *****************************
 
 	newthread->previous_fd = curthread->previous_fd;
-
 	int i = 0;
 	while (i < OPEN_MAX) {
 		struct file_descriptor *old_fd = curthread->file_descriptors[i];
@@ -591,7 +590,6 @@ thread_fork(const char *name,
 
 		i++;
 	}
-
 	// *********************************
 	// FIN MAKING A COPY OF THE FD TABLE
 	// *********************************
