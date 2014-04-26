@@ -151,6 +151,7 @@ int open_console_file(struct thread *curthread, int fd_id, int flags) {
 	fd->vnode = vn;
 	fd->flags = flags;
 	fd->offset = 0;	
+	fd->ref_count = 0;
 	fd->lock = lock_create(console);
 
 	return 0;

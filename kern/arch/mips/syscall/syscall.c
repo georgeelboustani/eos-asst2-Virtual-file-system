@@ -39,6 +39,7 @@
 #include <copyinout.h>
 #include <proc.h>
 #include <addrspace.h>
+#include <spinlock.h>
 
 /*
  * System call dispatcher.
@@ -230,19 +231,22 @@ enter_forked_process(void *data1, unsigned long data2)
 {
 	struct trapframe *tf = (struct trapframe*) data1;
 	struct addrspace *as = (struct addrspace*) data2;
-	(void)as;
-	// TODO - do we need to set as????????
-	//curthread->t_proc->p_addrspace = as;
-	as_activate();
-
-	tf->tf_v0 = 0;
-	tf->tf_v1 = 0;
-	tf->tf_a3 = 0;
-
-	tf->tf_epc += 4;
-
+	//(void)as;
+	
 	struct trapframe new_tf;
 	memcpy(&new_tf, tf, sizeof(struct trapframe));
+	kfree(tf);
+
+	spinlock_acquire(&curthread->t_proc->p_lock);
+	curthread->t_proc->p_addrspace = as;
+	spinlock_release(&curthread->t_proc->p_lock);
+	as_activate();
+
+	new_tf.tf_v0 = 0;
+	new_tf.tf_v1 = 0;
+	new_tf.tf_a3 = 0;
+
+	new_tf.tf_epc += 4;
 
 	mips_usermode(&new_tf);
 }

@@ -580,18 +580,13 @@ thread_fork(const char *name,
 
 	int i = 0;
 	while (i < OPEN_MAX) {
-		if (curthread->file_descriptors[i] != NULL) {
-			struct file_descriptor *old_fd = curthread->file_descriptors[i];
-			struct file_descriptor *new_fd = (struct file_descriptor*) kmalloc(sizeof(struct file_descriptor));
+		struct file_descriptor *old_fd = curthread->file_descriptors[i];
+		if (old_fd != NULL) {
+			old_fd->ref_count++;
 
-			new_fd->name = old_fd->name;
-			new_fd->ref_count = old_fd->ref_count;
-			new_fd->flags = old_fd->ref_count;
-			new_fd->offset = old_fd->offset;
-			new_fd->vnode = old_fd->vnode;
-			new_fd->lock = lock_create("lock_" + i);
-
-			newthread->file_descriptors[i] = new_fd;
+			newthread->file_descriptors[i] = old_fd;
+		} else {
+			newthread->file_descriptors[i] = NULL;
 		}
 
 		i++;
