@@ -15,6 +15,7 @@
 #include <file.h>
 #include <syscall.h>
 #include <copyinout.h>
+#include <proc.h>
 
 #define FAILED -1
 #define FREE_FD -1
@@ -45,26 +46,28 @@ struct retval mywrite(int fd_id, void* buf, size_t nbytes) {
 		return retval;
 	}
 	
-	char *buffer = (char*)kmalloc(nbytes);
-	if (buffer == NULL) {
-		retval.errno = ENOMEM;
-		return retval;
-	}
+	// char *buffer = (char*)kmalloc(nbytes);
+	// if (buffer == NULL) {
+	// 	retval.errno = ENOMEM;
+	// 	return retval;
+	// }
 	
 	lock_acquire(fd->lock);
 
 	struct iovec iov;
 	struct uio uio_writer;
 
-	uio_kinit(&iov, &uio_writer, (void*) buffer, nbytes, fd->offset, UIO_WRITE);
-	
-	//size_t length;	
-	int result = copyin((userptr_t)buf, buffer, nbytes);
-	if (result != NO_ERROR) {
-		lock_release(fd->lock);
-		retval.errno = result;
-		return retval;
-	}
+	uio_kinit(&iov, &uio_writer, (void*) buf, nbytes, fd->offset, UIO_WRITE);
+	uio_writer.uio_segflg = UIO_USERSPACE;
+	uio_writer.uio_space = curthread->t_proc->p_addrspace;
+
+	// size_t length;	
+	// int result = copyinstr((userptr_t)buf, buffer, nbytes, &length);
+	// if (result != NO_ERROR) {
+	// 	lock_release(fd->lock);
+	// 	retval.errno = result;
+	// 	return retval;
+	// }
 
 	int err = VOP_WRITE(fd->vnode, &uio_writer);
 	if (err) {
@@ -72,11 +75,11 @@ struct retval mywrite(int fd_id, void* buf, size_t nbytes) {
 		retval.errno = err;
 		return retval;
 	}
-	fd->offset = uio_writer.uio_offset;
+	fd->offset += nbytes - uio_writer.uio_resid;
 	lock_release(fd->lock);
 
 	retval.val_h = (void*)(nbytes - uio_writer.uio_resid);
-	kfree(buffer);
+	//kfree(buffer);
 
 	return retval;
 }
@@ -214,7 +217,7 @@ struct retval myread(int fd_id, void *buf, size_t nbytes) {
 		retval.errno = err;
 		return retval;
 	}
-	fd->offset = uio_reader.uio_offset;
+	fd->offset += nbytes - uio_reader.uio_resid;
 	retval.val_h = (void*)(nbytes - uio_reader.uio_resid);
 	
 	lock_release(fd->lock);
