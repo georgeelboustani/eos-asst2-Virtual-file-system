@@ -209,9 +209,8 @@ main(int argc, char * argv[])
 
 		default:
 			printf("* fork FAILED.\n");
+			break;
 	}
-
-	printf("HIII\n");
 
 	return 0;
 }

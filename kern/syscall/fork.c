@@ -39,7 +39,7 @@ struct retval myfork(struct trapframe *tf) {
 		return rv;
 	}
 	//int s =splhigh();
-	result = thread_fork(strcat(curthread->t_name, "_child"), new_proc, (void*)&enter_forked_process, (void *)new_tf, (unsigned long) curthread->t_proc->p_addrspace);
+	result = thread_fork(strcat(curthread->t_name, "_child"), new_proc, (void*)&enter_forked_process, (void *)new_tf, (unsigned long) new_as);
 	if (result) {
 		kfree(new_tf);
 		as_destroy(new_as);

@@ -237,9 +237,7 @@ enter_forked_process(void *data1, unsigned long data2)
 	memcpy(&new_tf, tf, sizeof(struct trapframe));
 	kfree(tf);
 
-	spinlock_acquire(&curthread->t_proc->p_lock);
-	curthread->t_proc->p_addrspace = as;
-	spinlock_release(&curthread->t_proc->p_lock);
+	proc_setas(as);
 	as_activate();
 
 	new_tf.tf_v0 = 0;

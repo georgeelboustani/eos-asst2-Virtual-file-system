@@ -32,6 +32,11 @@ struct retval mywrite(int fd_id, void* buf, size_t nbytes) {
 	retval.val_h = (int*) FAILED;
 	retval.val_l = (int*) FAILED;
 
+	if (fd_id <= FREE_FD || fd_id >= OPEN_MAX) {
+		retval.errno = EBADF;
+		return retval;
+	}
+
 	lock_acquire(curthread->fd_table_lock);
 	struct file_descriptor* fd = curthread->file_descriptors[fd_id];
 	if (fd == NULL) {
@@ -45,7 +50,7 @@ struct retval mywrite(int fd_id, void* buf, size_t nbytes) {
 		retval.errno = EACCES;
 		return retval;
 	}
-	
+
 	// char *buffer = (char*)kmalloc(nbytes);
 	// if (buffer == NULL) {
 	// 	retval.errno = ENOMEM;
@@ -181,26 +186,33 @@ struct retval myread(int fd_id, void *buf, size_t nbytes) {
 	retval.val_h = (int*) FAILED;
 	retval.val_l = (int*) FAILED;
 
+	if (fd_id <= FREE_FD || fd_id >= OPEN_MAX) {
+		retval.errno = EBADF;
+		return retval;
+	}
+
+//	char *buffer = (char*)kmalloc(nbytes);
+//	if (buffer == NULL) {
+//		retval.errno = ENOMEM;
+//		return retval;
+//	}
+
+	lock_acquire(curthread->fd_table_lock);
 	struct file_descriptor* fd = curthread->file_descriptors[fd_id];
 	if (fd == NULL) {
 		retval.errno = EBADF;
 		return retval;
 	}
+	lock_release(curthread->fd_table_lock);
 
 	if ((fd->flags & O_WRONLY) == O_WRONLY) {
 		retval.errno = EACCES;
 		return retval;
 	}
 
-	char *buffer = (char*)kmalloc(nbytes);
-	if (buffer == NULL) {
-		retval.errno = ENOMEM;
-		return retval;
-	}
-
 	struct iovec iov;
 	struct uio uio_reader;
-	uio_kinit(&iov, &uio_reader, (void*) buffer, nbytes, fd->offset, UIO_READ);
+	uio_kinit(&iov, &uio_reader, (void*) buf, nbytes, fd->offset, UIO_READ);
 
 	lock_acquire(fd->lock);
 	
@@ -211,17 +223,18 @@ struct retval myread(int fd_id, void *buf, size_t nbytes) {
 		return retval;
 	}
 
-	err = copyout(buffer, (userptr_t)buf, nbytes);
-	if (err) {
-		lock_release(fd->lock);
-		retval.errno = err;
-		return retval;
-	}
+//	err = copyout(buffer, (userptr_t)buf, nbytes);
+//	if (err) {
+//		lock_release(fd->lock);
+//		retval.errno = err;
+//		return retval;
+//	}
+
 	fd->offset += nbytes - uio_reader.uio_resid;
 	retval.val_h = (void*)(nbytes - uio_reader.uio_resid);
 	
 	lock_release(fd->lock);
-	kfree(buffer);
+//	kfree(buffer);
 
 	return retval;
 }
