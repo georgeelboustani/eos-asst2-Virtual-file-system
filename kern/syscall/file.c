@@ -200,6 +200,7 @@ struct retval myread(int fd_id, void *buf, size_t nbytes) {
 	lock_acquire(curthread->fd_table_lock);
 	struct file_descriptor* fd = curthread->file_descriptors[fd_id];
 	if (fd == NULL) {
+		lock_release(curthread->fd_table_lock);
 		retval.errno = EBADF;
 		return retval;
 	}
