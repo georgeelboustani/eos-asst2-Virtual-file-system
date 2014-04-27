@@ -354,6 +354,11 @@ struct retval mydup2(int oldfd_id, int newfd_id) {
 		return retval;
 	}
 
+	if (oldfd_id == newfd_id) {
+		retval.errno = NO_ERROR;
+		return retval;
+	}
+
 	lock_acquire(fd->lock);
 	struct file_descriptor *new_fd = curthread->file_descriptors[newfd_id];
 	if (new_fd != NULL) {
