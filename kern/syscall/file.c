@@ -213,7 +213,9 @@ struct retval myread(int fd_id, void *buf, size_t nbytes) {
 	struct iovec iov;
 	struct uio uio_reader;
 	uio_kinit(&iov, &uio_reader, (void*) buf, nbytes, fd->offset, UIO_READ);
-
+	uio_reader.uio_segflg = UIO_USERSPACE;
+	uio_reader.uio_space = curthread->t_proc->p_addrspace;
+	
 	lock_acquire(fd->lock);
 	
 	int err = VOP_READ(fd->vnode, &uio_reader);
