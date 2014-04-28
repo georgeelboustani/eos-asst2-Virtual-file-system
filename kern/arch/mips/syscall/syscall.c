@@ -40,6 +40,7 @@
 #include <proc.h>
 #include <addrspace.h>
 #include <spinlock.h>
+#include <endian.h>
 
 /*
  * System call dispatcher.
@@ -105,7 +106,7 @@ syscall(struct trapframe *tf)
 
 	retval_h = 0;
 	retval_l = 0;
-	off_t pos = 0;
+	uint64_t pos = 0;
 	int whence;
 	switch (callno) {
 		case SYS_reboot:
@@ -150,7 +151,7 @@ syscall(struct trapframe *tf)
 			break;
 
 		case SYS_lseek:
-			pos = ((off_t) tf->tf_a2 << 32) | ((off_t) tf->tf_a3);
+			join32to64((uint32_t) tf->tf_a2, (uint32_t) tf->tf_a3, &pos);
 			copyin((const_userptr_t)tf->tf_sp+16, &whence, sizeof(int));
 			val = mylseek(tf->tf_a0, pos, whence);
 			err = val.errno;

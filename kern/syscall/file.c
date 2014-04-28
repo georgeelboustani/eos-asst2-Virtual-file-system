@@ -16,6 +16,7 @@
 #include <syscall.h>
 #include <copyinout.h>
 #include <proc.h>
+#include <endian.h>
 
 #define FAILED -1
 #define FREE_FD -1
@@ -169,14 +170,12 @@ struct retval myopen(const_userptr_t filename, int flags) {
 
 	result = vfs_open(sys_filename, flags, 0664, &vn);
 	fd->vnode = vn;
-
-	if (result == NO_ERROR) {
-		retval.val_h = (int*) current_fd;
-	} else {
-		// TODO - clean up
+	if (result != NO_ERROR) {
 		retval.errno = result;
 		return retval;
 	}
+	retval.val_h = (int*) current_fd;
+
 	return retval;
 }
 
@@ -287,13 +286,20 @@ struct retval mylseek(int fd_id, off_t pos, int whence) {
 		return retval;
 	}
 
+	int result = VOP_TRYSEEK(fd->vnode, new_position);
+	if (result != NO_ERROR) {
+		lock_release(fd->lock);
+		retval.errno = result;
+		return retval;
+	}
+
 	fd->offset = new_position;
 
-	off_t word = fd->offset;
-	long temp = ((word >> 32) << 32);
-	int low = (int)(word - temp);
-	word = fd->offset;
-	int high = (int)(word >> 32);
+	uint64_t word = fd->offset;
+	uint32_t high = 0;
+	uint32_t low = 0;
+	split64to32(word, &high, &low);
+
 	retval.val_h = (int*) high;
 	retval.val_l = (int*) low;
 
@@ -349,14 +355,16 @@ struct retval mydup2(int oldfd_id, int newfd_id) {
 		return retval;
 	}
 
-	struct file_descriptor *fd = curthread->file_descriptors[oldfd_id];
-	if (fd == NULL) {
-		retval.errno = EBADF;
+	if (oldfd_id == newfd_id) {
+		retval.errno = NO_ERROR;
+		retval.val_h = (int*) newfd_id;
+		retval.val_l = (int*) 0;
 		return retval;
 	}
 
-	if (oldfd_id == newfd_id) {
-		retval.errno = NO_ERROR;
+	struct file_descriptor *fd = curthread->file_descriptors[oldfd_id];
+	if (fd == NULL) {
+		retval.errno = EBADF;
 		return retval;
 	}
 
@@ -377,13 +385,17 @@ struct retval mydup2(int oldfd_id, int newfd_id) {
 	new_fd->ref_count++;
 
 	retval.val_h = (int*) newfd_id;
-	curthread->file_descriptors[newfd_id] = new_fd;
+//	curthread->file_descriptors[newfd_id] = new_fd;
 
 	lock_release(fd->lock);
-
-	struct vnode* vn;
-	vfs_open(new_fd->name, new_fd->flags, 0664, &vn);
-	new_fd->vnode = vn;
+//
+//	struct vnode* vn;
+//	int result = vfs_open(new_fd->name, new_fd->flags, 0664, &vn);
+//	if (result != NO_ERROR) {
+//		retval.errno = result;
+//		return retval;
+//	}
+//	new_fd->vnode = vn;
 
 	return retval;
 }
