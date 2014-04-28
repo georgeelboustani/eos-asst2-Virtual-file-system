@@ -309,7 +309,7 @@ struct retval myclose(int fd_id) {
 	if (fd_id < curthread->previous_fd) {
 		curthread->previous_fd = fd_id;
 	}
-
+	retval.val_h = (int*) 0;
 	return retval;
 }
 
