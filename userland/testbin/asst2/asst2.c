@@ -178,11 +178,11 @@ main(int argc, char * argv[])
 		} while (i < 10 && r > 0);
 		i = 0;
 		while (i < 10) {
-			if (buf[i] == teststr[i] &&  newbuf[i] == teststr[i*2+1]) {
+			if (buf[i] == newbuf[i]) {
 				printf("* data at %d is the same: %c\n", i, buf[i]);
 			} else {
-				printf("buf[%d]%c == teststr[%d]%c && newbuf[%d]%c == teststr[%d]%c\n",i,buf[i],i,teststr[i],i,newbuf[i],i*2+1,teststr[i*2+1]);
-				//printf("ERROR buf[%d] = %c compared to newbuf[%d] = %c\n", i, buf[i], i, newbuf[i]);
+				printf("ERROR data at %d is different\n", i);
+				printf("buf[%d] = %c compared to newbuf[%d] = %c\n", i, buf[i], i, newbuf[i]);
 			}
 			i++;
 		}
@@ -209,10 +209,7 @@ main(int argc, char * argv[])
 
 		default:
 			printf("* fork FAILED.\n");
-			break;
 	}
 
 	return 0;
 }
-
-
