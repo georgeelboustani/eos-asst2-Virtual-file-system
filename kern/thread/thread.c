@@ -282,9 +282,6 @@ thread_destroy(struct thread *thread)
 		struct file_descriptor* fd = thread->file_descriptors[i];
 		if (fd != NULL) {
 			myclose(i);
-			lock_destroy(fd->lock);
-			kfree(fd);
-			thread->file_descriptors[i] = NULL;
 		}
 		i++;
 	}
