@@ -37,6 +37,10 @@
 #include <syscall.h>
 #include <file.h>
 #include <copyinout.h>
+#include <proc.h>
+#include <addrspace.h>
+#include <spinlock.h>
+#include <endian.h>
 
 /*
  * System call dispatcher.
@@ -102,7 +106,7 @@ syscall(struct trapframe *tf)
 
 	retval_h = 0;
 	retval_l = 0;
-	off_t pos = 0;
+	uint64_t pos = 0;
 	int whence;
 	switch (callno) {
 		case SYS_reboot:
@@ -147,7 +151,7 @@ syscall(struct trapframe *tf)
 			break;
 
 		case SYS_lseek:
-			pos = ((off_t) tf->tf_a2 << 32) | ((off_t) tf->tf_a3);
+			join32to64((uint32_t) tf->tf_a2, (uint32_t) tf->tf_a3, &pos);
 			copyin((const_userptr_t)tf->tf_sp+16, &whence, sizeof(int));
 			val = mylseek(tf->tf_a0, pos, whence);
 			err = val.errno;
@@ -163,6 +167,14 @@ syscall(struct trapframe *tf)
 			err = val.errno;
 			if (val.errno == NO_ERROR) {
 				retval_h = (int) val.val_h;
+			}
+			break;
+
+		case SYS_fork:
+			val = myfork(tf);
+			err = val.errno;
+			if (val.errno == NO_ERROR) {
+				retval_h = (pid_t) val.val_h;
 			}
 			break;
 
@@ -216,7 +228,24 @@ syscall(struct trapframe *tf)
  * Thus, you can trash it and do things another way if you prefer.
  */
 void
-enter_forked_process(struct trapframe *tf)
+enter_forked_process(void *data1, unsigned long data2)
 {
-	(void)tf;
+	struct trapframe *tf = (struct trapframe*) data1;
+	struct addrspace *as = (struct addrspace*) data2;
+	//(void)as;
+	
+	struct trapframe new_tf;
+	memcpy(&new_tf, tf, sizeof(struct trapframe));
+	kfree(tf);
+
+	proc_setas(as);
+	as_activate();
+
+	new_tf.tf_v0 = 0;
+	new_tf.tf_v1 = 0;
+	new_tf.tf_a3 = 0;
+
+	new_tf.tf_epc += 4;
+
+	mips_usermode(&new_tf);
 }

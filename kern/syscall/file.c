@@ -15,6 +15,8 @@
 #include <file.h>
 #include <syscall.h>
 #include <copyinout.h>
+#include <proc.h>
+#include <endian.h>
 
 #define FAILED -1
 #define FREE_FD -1
@@ -22,51 +24,51 @@
 
 int get_next_free_fd(void);
 
-/*
- * Add your file-related functions here ...
- */
 struct retval mywrite(int fd_id, void* buf, size_t nbytes) {
 	struct retval retval;
 	retval.errno = NO_ERROR;
 	retval.val_h = (int*) FAILED;
 	retval.val_l = (int*) FAILED;
 
-	struct file_descriptor* fd = curthread->file_descriptors[fd_id];
-	if (fd == NULL) {
+	if (fd_id <= FREE_FD || fd_id >= OPEN_MAX) {
 		retval.errno = EBADF;
 		return retval;
 	}
+
+	lock_acquire(curthread->fd_table_lock);
+	struct file_descriptor* fd = curthread->file_descriptors[fd_id];
+	if (fd == NULL) {
+		lock_release(curthread->fd_table_lock);
+		retval.errno = EBADF;
+		return retval;
+	}
+	lock_release(curthread->fd_table_lock);
 
 	if ((fd->flags & TWO_BITS) == O_RDONLY) {
 		retval.errno = EACCES;
 		return retval;
 	}
 
+	lock_acquire(fd->lock);
+
 	struct iovec iov;
 	struct uio uio_writer;
-	
-	size_t length;
-	char *buffer = (char*)kmalloc(nbytes);
-	if (buffer == NULL) {
-		retval.errno = ENOMEM;
-		return retval;
-	}
 
-	copyinstr((userptr_t)buf, buffer, nbytes, &length);
-
-	lock_acquire(fd->lock);
-	uio_kinit(&iov, &uio_writer, (void*) buffer, nbytes, fd->offset, UIO_WRITE);
+	uio_kinit(&iov, &uio_writer, (void*) buf, nbytes, fd->offset, UIO_WRITE);
+	uio_writer.uio_segflg = UIO_USERSPACE;
+	uio_writer.uio_space = curthread->t_proc->p_addrspace;
 
 	int err = VOP_WRITE(fd->vnode, &uio_writer);
 	if (err) {
+		lock_release(fd->lock);
 		retval.errno = err;
 		return retval;
 	}
-	fd->offset = uio_writer.uio_offset;
-	lock_release(fd->lock);
 
+	fd->offset += nbytes - uio_writer.uio_resid;
 	retval.val_h = (void*)(nbytes - uio_writer.uio_resid);
-	kfree(buffer);
+
+	lock_release(fd->lock);
 
 	return retval;
 }
@@ -108,14 +110,6 @@ struct retval myopen(const_userptr_t filename, int flags) {
 		retval.errno = result;
 		return retval;
 	}
-
-	lock_acquire(curthread->fd_table_lock);
-	int current_fd = get_next_free_fd();
-
-	if (current_fd == FREE_FD) {
-		retval.errno = ENFILE;
-		return retval;
-	}
 	
 	struct file_descriptor* fd = (struct file_descriptor*)kmalloc(sizeof(struct file_descriptor));
 	if (fd == NULL) {
@@ -125,7 +119,7 @@ struct retval myopen(const_userptr_t filename, int flags) {
 
 	fd->name = (char*)filename;
 	fd->flags = flags;
-	fd->ref_count = 1;
+	fd->ref_count = 0;
 
 	if ((flags & O_APPEND) == O_APPEND) {
 		struct stat stat_buffer;
@@ -142,19 +136,28 @@ struct retval myopen(const_userptr_t filename, int flags) {
 		return retval;
 	}
 
+	lock_acquire(curthread->fd_table_lock);
+	int current_fd = get_next_free_fd();
+
+	if (current_fd == FREE_FD) {
+		lock_release(curthread->fd_table_lock);
+		retval.errno = ENFILE;
+		return retval;
+	}
+
 	curthread->file_descriptors[current_fd] = fd;
 	curthread->previous_fd = current_fd;
+
 	lock_release(curthread->fd_table_lock);
 
 	result = vfs_open(sys_filename, flags, 0664, &vn);
 	fd->vnode = vn;
-
-	if (result == NO_ERROR) {
-		retval.val_h = (int*) current_fd;
-	} else {
+	if (result != NO_ERROR) {
 		retval.errno = result;
 		return retval;
 	}
+	retval.val_h = (int*) current_fd;
+
 	return retval;
 }
 
@@ -164,41 +167,44 @@ struct retval myread(int fd_id, void *buf, size_t nbytes) {
 	retval.val_h = (int*) FAILED;
 	retval.val_l = (int*) FAILED;
 
-	struct file_descriptor* fd = curthread->file_descriptors[fd_id];
-	if (fd == NULL) {
+	if (fd_id <= FREE_FD || fd_id >= OPEN_MAX) {
 		retval.errno = EBADF;
 		return retval;
 	}
+
+	lock_acquire(curthread->fd_table_lock);
+	struct file_descriptor* fd = curthread->file_descriptors[fd_id];
+	if (fd == NULL) {
+		lock_release(curthread->fd_table_lock);
+		retval.errno = EBADF;
+		return retval;
+	}
+	lock_release(curthread->fd_table_lock);
 
 	if ((fd->flags & O_WRONLY) == O_WRONLY) {
 		retval.errno = EACCES;
 		return retval;
 	}
 
+	lock_acquire(fd->lock);
+
 	struct iovec iov;
 	struct uio uio_reader;
-	char *buffer = (char*)kmalloc(nbytes);
-	if (buffer == NULL) {
-		retval.errno = ENOMEM;
-		return retval;
-	}
-
-	lock_acquire(fd->lock);
-	uio_kinit(&iov, &uio_reader, (void*) buffer, nbytes, fd->offset, UIO_READ);
+	uio_kinit(&iov, &uio_reader, (void*) buf, nbytes, fd->offset, UIO_READ);
+	uio_reader.uio_segflg = UIO_USERSPACE;
+	uio_reader.uio_space = curthread->t_proc->p_addrspace;	
+	
 	int err = VOP_READ(fd->vnode, &uio_reader);
-
-	size_t length;
-	copyoutstr(buffer, (userptr_t)buf, nbytes, &length);
-
 	if (err) {
+		lock_release(fd->lock);
 		retval.errno = err;
 		return retval;
 	}
-	fd->offset = uio_reader.uio_offset;
-	lock_release(fd->lock);
 
+	fd->offset += nbytes - uio_reader.uio_resid;
 	retval.val_h = (void*)(nbytes - uio_reader.uio_resid);
-	kfree(buffer);
+
+	lock_release(fd->lock);
 
 	return retval;
 }
@@ -221,49 +227,50 @@ struct retval mylseek(int fd_id, off_t pos, int whence) {
 	}
 
 	lock_acquire(fd->lock);
+	int new_position = 0;
 	if (whence == SEEK_SET) {
-		fd->offset = pos;
-
-		off_t word = fd->offset;
-		long temp = ((word >> 32) << 32);
-		int low = (int)(word - temp);
-
-		word = fd->offset;
-		int high = (int)(word >> 32);
-
-		retval.val_h = (int*) high;
-		retval.val_l = (int*) low;
+		new_position = pos;
 	} else if (whence == SEEK_CUR) {
-		fd->offset += pos;
-
-		off_t word = fd->offset;
-		long temp = ((word >> 32) << 32);
-		int low = (int)(word - temp);
-
-		word = fd->offset;
-		int high = (int)(word >> 32);
-
-		retval.val_h = (int*) high;
-		retval.val_l = (int*) low;
+		new_position = fd->offset + pos;
 	} else if (whence == SEEK_END) {
 		struct stat stat_buffer;
-		VOP_STAT(fd->vnode, &stat_buffer);
+		int result = VOP_STAT(fd->vnode, &stat_buffer);
+		if (result) {
+			lock_release(fd->lock);
+			retval.errno = result;
+			return retval;
+		}
 
-		fd->offset = stat_buffer.st_size + pos;
-
-		off_t word = fd->offset;
-		long temp = ((word >> 32) << 32);
-		int low = (int)(word - temp);
-
-		word = fd->offset;
-		int high = (int)(word >> 32);
-
-		retval.val_h = (int*) high;
-		retval.val_l = (int*) low;
+		new_position = stat_buffer.st_size + pos;
 	} else {
+		lock_release(fd->lock);
 		retval.errno = EINVAL;
 		return retval;
 	}
+
+	if (new_position < 0) {
+		lock_release(fd->lock);
+		retval.errno = EINVAL;
+		return retval;
+	}
+
+	int result = VOP_TRYSEEK(fd->vnode, new_position);
+	if (result != NO_ERROR) {
+		lock_release(fd->lock);
+		retval.errno = result;
+		return retval;
+	}
+
+	fd->offset = new_position;
+
+	uint64_t word = fd->offset;
+	uint32_t high = 0;
+	uint32_t low = 0;
+	split64to32(word, &high, &low);
+
+	retval.val_h = (int*) high;
+	retval.val_l = (int*) low;
+
 	lock_release(fd->lock);
 
 	return retval;
@@ -280,28 +287,29 @@ struct retval myclose(int fd_id) {
 		return retval;
 	}
 
-	lock_acquire(curthread->fd_table_lock);
 	struct file_descriptor* fd = curthread->file_descriptors[fd_id];
 	if (fd == NULL) {
-		lock_release(curthread->fd_table_lock);
 		retval.errno = EBADF;
 		return retval;
 	}
 
-	vfs_close(fd->vnode);
-	fd->ref_count--;
+	lock_acquire(fd->lock);
 
 	if (fd->ref_count == 0) {
+		vfs_close(fd->vnode);
+		lock_release(fd->lock);
 		lock_destroy(fd->lock);
 		kfree(fd);
-		curthread->file_descriptors[fd_id] = NULL;
-
-		if (fd_id < curthread->previous_fd) {
-			curthread->previous_fd = fd_id;
-		}
+	} else {
+		fd->ref_count--;
+		lock_release(fd->lock);
 	}
-	lock_release(curthread->fd_table_lock);
 
+	curthread->file_descriptors[fd_id] = NULL;
+	if (fd_id < curthread->previous_fd) {
+		curthread->previous_fd = fd_id;
+	}
+	retval.val_h = (int*) 0;
 	return retval;
 }
 
@@ -316,6 +324,12 @@ struct retval mydup2(int oldfd_id, int newfd_id) {
 		return retval;
 	}
 
+	if (oldfd_id == newfd_id) {
+		retval.errno = NO_ERROR;
+		retval.val_h = (int*) newfd_id;
+		return retval;
+	}
+
 	struct file_descriptor *fd = curthread->file_descriptors[oldfd_id];
 	if (fd == NULL) {
 		retval.errno = EBADF;
@@ -325,33 +339,28 @@ struct retval mydup2(int oldfd_id, int newfd_id) {
 	lock_acquire(fd->lock);
 	struct file_descriptor *new_fd = curthread->file_descriptors[newfd_id];
 	if (new_fd != NULL) {
+		if (fd->lock == new_fd->lock) {
+			// The are actually the same fd so dont do anything
+			lock_release(fd->lock);
+			retval.errno = NO_ERROR;
+			retval.val_h = (int*) newfd_id;
+			return retval;
+		}
+
 		struct retval result = myclose(newfd_id);
+
 		if (result.errno != NO_ERROR) {
 			lock_release(fd->lock);
 			return result;
 		}
 	}
 
-	new_fd = (struct file_descriptor*) kmalloc(sizeof(struct file_descriptor));
-	if (new_fd == NULL) {
-		retval.errno = ENOMEM;
-		return retval;
-	}
-
-	new_fd->flags = fd->flags;
-	new_fd->lock = lock_create("" + newfd_id);
-	new_fd->name = fd->name;
-	new_fd->offset = fd->offset;
-	new_fd->ref_count = 1;
-	retval.val_h = (int*) newfd_id;
-	curthread->file_descriptors[newfd_id] = new_fd;
+	curthread->file_descriptors[newfd_id] = fd;
+	fd->ref_count++;
 
 	lock_release(fd->lock);
 
-	struct vnode* vn;
-	vfs_open(new_fd->name, new_fd->flags, 0664, &vn);
-	new_fd->vnode = vn;
-
+	retval.val_h = (int*) newfd_id;
 	return retval;
 }
 

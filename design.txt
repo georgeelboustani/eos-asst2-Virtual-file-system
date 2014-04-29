@@ -1,0 +1,95 @@
+At the core of this assignment our job is to bridge the gap between
+kernel space and userland by implementing the required system calls:
+write, read, open, close, lseek and dup2. In order to successfully design
+a working solution to the problem, an understanding of the available
+tools found mainly in the vfs layer was required.
+
+In order to form the bridge between userland and kernel space, the
+system calls from the user must be captured by trapframes and delegated
+to the appropriate functions within the kernel. Within the kernel space,
+the interaction between the user input and the virtual file system must
+be carefully managed. The first is retrieving the parameters passed
+in from the user. An important note here is that some parameters are
+32bit and others 64bit, requiring us to carefully access each. There
+are also buffer references passed in, whose locations are actually
+in userspace. This too require care when dealing with them, requiring
+copyin/copyout calls to move data between the kernel and userland, as
+well as careful configuration of the vfs layer operations. To succesfully
+manage the file system calls, a file descriptor table is maintained for
+each thread. This is opposed to being a global array, allowing us to
+keep track of which files are opened in each process.
+
+The file descriptor tables contain file descriptors. These represent the
+files, storing important information such as the respective modes under
+which the files were opend - read only, write only or read write. These
+are also used to keep track of how many references there are to an
+open file descriptor. This is used to to know when it is safe to close
+a file, especially after a dup2 operation is performed. A reference
+count is also useful when a process is forked. The file descriptor is
+also responsible for tracking where in the file to write to or read
+from next. It facilitates jumping from one part of the file to the
+other, specifically when the lseek operation is performed. It does
+this by keeping track of the current offset from the beginning of the
+file each file descriptor is at. The file descriptors also store the
+vnode, representing the file in the file system, and a lock used for
+synchronisation of operation that might otherwise lead to conflicts.
+
+With the file descriptor table doing all the bookkeeping for us, the next
+step is to delegate to the appropriate virtual file system calls to read
+from, write to and maintain access counts to each file represented by a
+vnode. Essentially each function has a corresponding call, open requires
+a call to vfs_open, close calls vfs_close, lseek checks with VOP_TRYSEEK
+to check if the new seek position is valid for the particular node and
+performs the seek, read calls VOP_READ to extract information when given
+the location to read from and how much to read. Lastly, write calls
+VOP_WRITE to save data from a certain location with a given length. In
+order to make use of VOP_READ and VOP_WRITE, we make use of the uio
+abstraction of memory blocks to physically write and read to the files.
+
+Given that multiple processes are allowed to run simultaneously on the
+same vnodes, each file descriptor has an internal lock that ensures all
+data write and read operations are completely atomic such that no two
+calls will overwrite the other. Additionally any duplications, opening and
+closing of files cannot interrupt one another as a lock must be acquired
+in order to proceed. If any errors are encountered, be it an internal
+error passed up from the virtual file system, or an error raised by the
+input checking performed in our file system operations, the locks are
+immediately released and the error is returned. These locks ensure the
+internal state of the file descriptor is consistent. This includes the
+value of the offset, and the access to the vnode and its fs operations.
+
+All system call functions have extensive input checking, notably
+all functions throwing an EBADF (bad file number) if an invalid file
+descriptor number is ever passed in. Each system call also immediately
+returns an error should any delegated calls fail on return, such as any
+vfs or VOP calls. For reading, the flags are checked to ensure the file
+descriptor has been opened for read only or read and write and likewise
+writing checks that the file is opened for write only and read and write,
+throwing an EINVAL if the desired condition is not satisfied. Any kind
+of memory allocation performed in the kernal (kmalloc) is immediately
+checked for NULL and throws an ENOMEM should no memory be granted to
+the required item. Open performs additional checks for flags such that
+no invalid state can be achieved such as a read only and a write only
+flag being set for the same file descriptor. Essentially open checks
+that only one of the following three flags are set, read only, write
+only or read write, rejecting any other case.
+
+The file descriptor table is included in the thread struct, and is
+intialised on thread startup in runprogram. Here we ensure the STDOUT
+and STDERR are open by default, with fd’s 1 and 2, as this is what user
+level applications expect. File descriptor id’s are allocated in such a
+way to ensure uniqueness. An id cannot be allocated if it is already in
+used by an open file in the specific process file descriptor table. The
+allocation of id’s is handled through the use of a previous_fd variable
+in each thread, which tracks the previously allocated descriptor. If
+a file descriptor is freed, and it is lower then the previoud_fd,
+then the previous_fd is updated to that fd_id. This allows us to always
+allocate the smallest available id. In order to find the next available,
+we search the file descriptor table from left to right, starting from
+the previous_id index, until we find an index which is NULL. This index
+represents the smallest next free file descriptor id. This method of id
+allocation and search is more efficient than simply searching the whole
+file descriptor table each time. The file descriptor table is full,
+i.e. has OPEN_MAX file descriptors in it, when we cannot find a NULL
+index when we search from previous_fd onwards.
+

@@ -190,7 +190,7 @@ main(int argc, char * argv[])
 		printf("ERROR dup2 failed, return fd: %d is different from parameter: %d\n", r, used_fd);
 	}
 
-	printf("* dup2() success! YOU ARE AWESOME! *gay nerd chills*\n");
+	printf("* dup2() success! YOU ARE AWESOME!\n");
 
 	printf("* closing file\n");
 	close(fd);
@@ -213,5 +213,3 @@ main(int argc, char * argv[])
 
 	return 0;
 }
-
-

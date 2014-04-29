@@ -282,9 +282,6 @@ thread_destroy(struct thread *thread)
 		struct file_descriptor* fd = thread->file_descriptors[i];
 		if (fd != NULL) {
 			myclose(i);
-			lock_destroy(fd->lock);
-			kfree(fd);
-			thread->file_descriptors[i] = NULL;
 		}
 		i++;
 	}
@@ -571,6 +568,28 @@ thread_fork(const char *name,
 	 * for the spllower() that will be done releasing it.
 	 */
 	newthread->t_iplhigh_count++;
+
+	// *****************************
+	// MAKING A COPY OF THE FD TABLE
+	// *****************************
+
+	newthread->previous_fd = curthread->previous_fd;
+	int i = 0;
+	while (i < OPEN_MAX) {
+		struct file_descriptor *old_fd = curthread->file_descriptors[i];
+		if (old_fd != NULL) {
+			old_fd->ref_count++;
+
+			newthread->file_descriptors[i] = old_fd;
+		} else {
+			newthread->file_descriptors[i] = NULL;
+		}
+
+		i++;
+	}
+	// *********************************
+	// FIN MAKING A COPY OF THE FD TABLE
+	// *********************************
 
 	/* Set up the switchframe so entrypoint() gets called */
 	switchframe_init(newthread, entrypoint, data1, data2);
