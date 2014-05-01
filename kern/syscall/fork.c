@@ -52,3 +52,11 @@ struct retval myfork(struct trapframe *tf) {
 	rv.val_h = (pid_t*)1;
 	return rv;
 }
+
+struct retval mygetpid(void) {
+	struct retval rv;
+	rv.errno = NO_ERROR;
+	rv.val_h = (pid_t*)curthread->t_proc->pid;
+	rv.val_l = (pid_t*)0;
+	return rv;
+}

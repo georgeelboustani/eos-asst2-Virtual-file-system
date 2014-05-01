@@ -19,6 +19,9 @@ main(int argc, char * argv[])
 	(void) argc;
 	(void) argv;
 
+	pid_t p = getpid();
+	printf("PID of this process is: %d", p);
+
 	printf("\n**********\n* File Tester\n");
 
 	snprintf(buf, MAX_BUF, "**********\n* write() works for stdout\n");
@@ -198,18 +201,23 @@ main(int argc, char * argv[])
 	/* Forking */
 	printf("**********\n* testing fork\n");
 
+	pid_t parent = 0;
+	pid_t child = 0;
 	switch(fork()) {
 		case 1:
 			printf("* Forked, in parent\n");
+			parent = getpid();
 			break;
 
 		case 0:
 			printf("* Forked, in child\n");
+			child = getpid();
 			break;
 
 		default:
 			printf("* fork FAILED.\n");
 	}
+	printf("parent pid: %d, child pid: %d\n", parent, child);
 
 	return 0;
 }
