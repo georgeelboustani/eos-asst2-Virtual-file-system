@@ -49,15 +49,30 @@
 #include <addrspace.h>
 #include <vnode.h>
 
-#define UNASSIGNED -2
 #define PROC_MAX 32
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
  */
 struct proc *kproc;
-// Use a dynamic table or we'll eat up too much stack memory.
+struct lock* pid_table_lock = NULL;
+// Change to a process array which stores a semaphore as well as a process.
 struct proc* pid_table[PROC_MAX] = {NULL};
+
+/*
+ * Get a process from an ID
+ */
+struct proc* get_process_by_id(pid_t proc_id) {
+	if (proc_id < 0 || proc_id > PROC_MAX) {
+		return NULL;
+	}
+
+	return pid_table[proc_id];
+}
+
+struct lock* get_pid_table_lock(void) {
+	return pid_table_lock;
+}
 
 /*
  * Create a proc structure.
@@ -78,6 +93,15 @@ proc_create(const char *name)
 		return NULL;
 	}
 
+	if (pid_table_lock == NULL) {
+		pid_table_lock = lock_create("pid_table_lock");
+		if (pid_table_lock == NULL) {
+			kfree(proc->p_name);
+			kfree(proc);
+			panic("Could not create lock\n");
+		}
+	}
+
 	int i = PID_MIN;
 	// Set to UNASSIGNED temporarily, for checking later
 	proc->pid = UNASSIGNED;
@@ -94,6 +118,9 @@ proc_create(const char *name)
 		kfree(proc);
 		panic("Could not assign a PID to this process\n");
 	}
+
+	proc->parent_pid = UNASSIGNED;
+	proc->exit_semaphore = sem_create("exit_semaphore", 0);
 
 	threadarray_init(&proc->p_threads);
 	spinlock_init(&proc->p_lock);
@@ -189,6 +216,8 @@ proc_destroy(struct proc *proc)
 
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
+
+	//TODO: SEMAPHORE LEAKING EVERYWHERE
 
 	kfree(proc->p_name);
 	kfree(proc);

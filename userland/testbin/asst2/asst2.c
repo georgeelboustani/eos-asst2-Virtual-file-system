@@ -203,19 +203,28 @@ main(int argc, char * argv[])
 
 	pid_t parent = 0;
 	pid_t child = 0;
-	switch(fork()) {
-		case 1:
-			printf("* Forked, in parent\n");
-			parent = getpid();
-			break;
-
-		case 0:
+	int status;
+	pid_t childID = fork();
+	if (childID >= 0) {
+		printf("* Forking success\n");
+		if (childID == 0) {
 			printf("* Forked, in child\n");
 			child = getpid();
-			break;
-
-		default:
-			printf("* fork FAILED.\n");
+			printf("* Exiting child\n");
+			int i = 0;
+			while (i < 10000000) {
+				i++;
+			}
+			exit(0);
+		} else {
+			printf("* Forked, in parent\n");
+			parent = getpid();
+			printf("* Checking on child exitcode\n");
+			pid_t pid = waitpid(childID, &status, 0);
+			printf("* Child: %d exited with exitcode: %d\n", pid, status);
+		}
+	} else {
+		printf("* Forking failed\n");
 	}
 	printf("parent pid: %d, child pid: %d\n", parent, child);
 
