@@ -50,13 +50,14 @@
 #include <vnode.h>
 
 #define UNASSIGNED -2
+#define PROC_MAX 32
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
  */
 struct proc *kproc;
 // Use a dynamic table or we'll eat up too much stack memory.
-pid_t** pid_table;
+struct proc* pid_table[PROC_MAX] = {NULL};
 
 /*
  * Create a proc structure.
@@ -77,6 +78,23 @@ proc_create(const char *name)
 		return NULL;
 	}
 
+	int i = PID_MIN;
+	// Set to UNASSIGNED temporarily, for checking later
+	proc->pid = UNASSIGNED;
+	while (i < PROC_MAX) {
+		if (pid_table[i] == NULL) {
+			pid_table[i] = proc;
+			proc->pid = i;
+			break;
+		}
+		i++;
+	}
+	if (proc->pid == UNASSIGNED) {
+		kfree(proc->p_name);
+		kfree(proc);
+		panic("Could not assign a PID to this process\n");
+	}
+
 	threadarray_init(&proc->p_threads);
 	spinlock_init(&proc->p_lock);
 
@@ -85,30 +103,6 @@ proc_create(const char *name)
 
 	/* VFS fields */
 	proc->p_cwd = NULL;
-
-	// Give the process a new, unused PID.
-	if (pid_table == NULL) {
-		pid_table = kmalloc(sizeof(pid_t));
-		if (pid_table == NULL) {
-			panic("Could not initialize pid_table\n");
-		}
-	}
-
-	int i = PID_MIN;
-	// Set to UNASSIGNED temporarily, for checking later
-	proc->pid = UNASSIGNED;
-	while (i < PID_MAX) {
-		if (pid_table[i] == NULL) {
-			pid_table[i] = kmalloc(sizeof(pid_t));
-			*pid_table[i] = i;
-			proc->pid = i;
-			break;
-		}
-		i++;
-	}
-	if (proc->pid == UNASSIGNED) {
-		panic("Could not assign a PID to this process\n");
-	}
 
 	return proc;
 }

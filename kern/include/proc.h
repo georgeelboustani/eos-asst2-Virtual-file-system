@@ -59,6 +59,10 @@ struct proc {
 	/* add more material here as needed */
 	pid_t pid;
 	pid_t parent_pid;
+
+	int exitcode;			/* exit code of the process */
+
+	struct semaphore* exitlock;	/* lock for used for waitpid and exit */
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */

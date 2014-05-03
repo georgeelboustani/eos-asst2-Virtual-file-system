@@ -60,3 +60,14 @@ struct retval mygetpid(void) {
 	rv.val_l = (pid_t*)0;
 	return rv;
 }
+
+struct retval mywaitpid(pid_t, int *status, int options) {
+	struct retval rv;
+	rv.errno = NO_ERROR;
+	rv.val_h = (pid_t)-1;
+	rv.val_l = (pid_t)0;
+
+
+
+	return rv;
+}

@@ -186,6 +186,14 @@ syscall(struct trapframe *tf)
 			}
 			break;
 
+		case SYS_waitpid:
+			val = mywaitpid((pid_t)tf->tf_a0, (int)tf->tf_a1, (int)tf->tf_a2);
+			err = val.errno;
+			if (val.errno == NO_ERROR) {
+				retval_h = (pid_t) val.val_h;
+			}
+			break;
+
 		case SYS___time:
 		        err = sys___time((userptr_t)tf->tf_a0,
 				 (userptr_t)tf->tf_a1);

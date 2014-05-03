@@ -41,5 +41,6 @@ struct retval mydup2(int oldfd, int newfd);
 struct trapframe;
 struct retval myfork(struct trapframe *tf);
 struct retval mygetpid(void);
+struct retval mywaitpid(pid_t, int *status, int options);
 
 #endif /* _FILE_H_ */
