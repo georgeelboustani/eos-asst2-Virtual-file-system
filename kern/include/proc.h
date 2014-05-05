@@ -40,6 +40,7 @@
 #include <thread.h> /* required for struct threadarray */
 
 #define UNASSIGNED -2
+#define INDEX_OUT_OF_BOUNDS -1
 
 struct addrspace;
 struct vnode;
@@ -61,12 +62,15 @@ struct proc {
 	/* add more material here as needed */
 	pid_t pid;
 	pid_t parent_pid;
+};
 
+struct process {
 	int exitcode;			/* exit code of the process */
 
-	struct semaphore* exit_semaphore;	/* semaphore for used for waitpid and exit */
-
-//	struct thread* p_thread;
+	struct cv* exit_cv;		/* cv for used for waitpid and exit */
+//	struct lock* exit_lock;		/* lock used for waitpid and exit */
+	struct proc* proc;
+//	struct thread* thread;		/* thread attached to process */
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */
@@ -93,8 +97,10 @@ struct addrspace *proc_getas(void);
 /* Change the address space of the current process, and return the old one. */
 struct addrspace *proc_setas(struct addrspace *);
 
-struct proc* get_process_by_id(pid_t proc_id);
+struct process* get_process_by_id(pid_t proc_id);
 
 struct lock* get_pid_table_lock(void);
+
+int remove_process_by_id(pid_t proc_id);
 
 #endif /* _PROC_H_ */

@@ -211,10 +211,10 @@ main(int argc, char * argv[])
 			printf("* Forked, in child\n");
 			child = getpid();
 			printf("* Exiting child\n");
-			int i = 0;
-			while (i < 10000000) {
-				i++;
-			}
+//			int i = 0;
+//			while (i < 2000000000) {
+//				i++;
+//			}
 			exit(0);
 		} else {
 			printf("* Forked, in parent\n");

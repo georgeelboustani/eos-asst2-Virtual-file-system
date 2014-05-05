@@ -45,7 +45,8 @@ struct retval myfork(struct trapframe *tf) {
 		return rv;
 	}
 
-	result = thread_fork(strcat(curthread->t_name, "_child"), new_proc, (void*)&enter_forked_process, (void *)new_tf, (unsigned long) new_as);
+	char dest;
+	result = thread_fork(strcat(strcpy(&dest, curthread->t_name), "_child"), new_proc, (void*)&enter_forked_process, (void *)new_tf, (unsigned long) new_as);
 	if (result) {
 		kfree(new_tf);
 		as_destroy(new_as);
@@ -79,7 +80,7 @@ struct retval mywaitpid(pid_t proc_id, int *status, int options) {
 
 	lock_acquire(get_pid_table_lock());
 
-	struct proc *child_proc = get_process_by_id(proc_id);
+	struct process *child_proc = get_process_by_id(proc_id);
 
 	if (child_proc == NULL) {
 		lock_release(get_pid_table_lock());
@@ -87,14 +88,33 @@ struct retval mywaitpid(pid_t proc_id, int *status, int options) {
 		return rv;
 	}
 
-	if (curthread->t_proc->pid == child_proc->pid ||
-		curthread->t_proc->pid != child_proc->parent_pid) {
+	if (curthread->t_proc->pid == child_proc->proc->pid ||
+		curthread->t_proc->pid != child_proc->proc->parent_pid) {
 		lock_release(get_pid_table_lock());
 		rv.errno = ECHILD;
 		return rv;
 	}
 
+	if (child_proc->exitcode == __WEXITED || child_proc->exitcode == __WCORED ||
+			child_proc->exitcode == __WSIGNALED || child_proc->exitcode == __WSTOPPED) {
+//		lock_destroy(child_proc->exit_lock);
+
+		int result = remove_process_by_id(proc_id);
+		if (result != NO_ERROR) {
+			rv.val_h = (int*) result;
+			lock_release(get_pid_table_lock());
+			return rv;
+		}
+
+		rv.val_h = (pid_t*) proc_id;
+		lock_release(get_pid_table_lock());
+		return rv;
+	}
+
 	lock_release(get_pid_table_lock());
+
+	lock_acquire(get_pid_table_lock());
+	cv_wait(child_proc->exit_cv, get_pid_table_lock());
 
 	*status = child_proc->exitcode;
 	int result = copyout(&child_proc->exitcode, (userptr_t)status, sizeof(int));
@@ -102,17 +122,11 @@ struct retval mywaitpid(pid_t proc_id, int *status, int options) {
 		rv.errno = result;
 		return rv;
 	}
-	rv.val_h = (pid_t*) child_proc->pid;
+	rv.val_h = (pid_t*) child_proc->proc->pid;
+	remove_process_by_id(child_proc->proc->pid);
+	lock_release(get_pid_table_lock());
 
-	P(child_proc->exit_semaphore);
-
-	// Clean up child process.
-	// Free up pid_table slot.
-//	struct proc* proc = curthread->t_proc;
-//	struct thread* child_thread = child_proc->p_thread;
-//	proc_remthread(child_thread);
-//	proc_destroy(child_proc);
-//	thread_destroy(child_thread);
+//	lock_destroy(child_proc->exit_lock);
 
 	return rv;
 }
@@ -123,17 +137,18 @@ struct retval myexit(int exitcode) {
 	rv.val_h = (int*)-1;
 	rv.val_l = (int*)0;
 
+	struct process *proc = get_process_by_id(curthread->t_proc->pid);
 	lock_acquire(get_pid_table_lock());
-	if (curthread->t_proc->parent_pid != UNASSIGNED) {
+	if (proc->proc->parent_pid != UNASSIGNED) {
 		// Indicate that we've exited.
-		curthread->t_proc->exitcode = _MKWAIT_EXIT(exitcode);
-		V(curthread->t_proc->exit_semaphore);
+		proc->exitcode = _MKWAIT_EXIT(exitcode);
+		cv_signal(proc->exit_cv, get_pid_table_lock());
 	}
+	struct proc* cur_proc = curthread->t_proc;
+	proc_remthread(curthread);
+	proc_destroy(cur_proc);
 	lock_release(get_pid_table_lock());
-
-	// Child should be able to kill itself and exit.
-	// Thread exit is hanging on main thread exiting (no other threads to switch to)
-//	thread_exit();
+	thread_exit();
 
 	return rv;
 }

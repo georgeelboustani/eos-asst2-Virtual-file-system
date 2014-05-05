@@ -57,12 +57,12 @@
 struct proc *kproc;
 struct lock* pid_table_lock = NULL;
 // Change to a process array which stores a semaphore as well as a process.
-struct proc* pid_table[PROC_MAX] = {NULL};
+struct process* pid_table[PROC_MAX] = {NULL};
 
 /*
  * Get a process from an ID
  */
-struct proc* get_process_by_id(pid_t proc_id) {
+struct process* get_process_by_id(pid_t proc_id) {
 	if (proc_id < 0 || proc_id > PROC_MAX) {
 		return NULL;
 	}
@@ -72,6 +72,18 @@ struct proc* get_process_by_id(pid_t proc_id) {
 
 struct lock* get_pid_table_lock(void) {
 	return pid_table_lock;
+}
+
+int remove_process_by_id(pid_t proc_id) {
+	if (proc_id < 0 || proc_id > PROC_MAX) {
+		return INDEX_OUT_OF_BOUNDS;
+	}
+	struct process* proc = pid_table[proc_id];
+
+	cv_destroy(proc->exit_cv);
+	kfree(proc);
+
+	return 0;
 }
 
 /*
@@ -102,12 +114,17 @@ proc_create(const char *name)
 		}
 	}
 
+	struct process* process = (struct process*)kmalloc(sizeof(struct process));
+	if (process == NULL) {
+		panic("Could not initialize process\n");
+	}
+	process->proc = proc;
 	int i = PID_MIN;
 	// Set to UNASSIGNED temporarily, for checking later
 	proc->pid = UNASSIGNED;
 	while (i < PROC_MAX) {
 		if (pid_table[i] == NULL) {
-			pid_table[i] = proc;
+			pid_table[i] = process;
 			proc->pid = i;
 			break;
 		}
@@ -120,7 +137,8 @@ proc_create(const char *name)
 	}
 
 	proc->parent_pid = UNASSIGNED;
-	proc->exit_semaphore = sem_create("exit_semaphore", 0);
+	process->exit_cv = cv_create("exit_cv");
+//	process->exit_lock = lock_create("exit_lock");
 
 	threadarray_init(&proc->p_threads);
 	spinlock_init(&proc->p_lock);
@@ -216,8 +234,6 @@ proc_destroy(struct proc *proc)
 
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
-
-	//TODO: SEMAPHORE LEAKING EVERYWHERE
 
 	kfree(proc->p_name);
 	kfree(proc);
