@@ -1,8 +1,8 @@
-At the core of this assignment our job is to bridge the gap between
-kernel space and userland by implementing the required system calls:
-write, read, open, close, lseek and dup2. In order to successfully design
-a working solution to the problem, an understanding of the available
-tools found mainly in the vfs layer was required.
+ASST2 Design Document: System Calls At the core of this assignment our job
+is to bridge the gap between kernel space and userland by implementing the
+required system calls: write, read, open, close, lseek and dup2. In order
+to successfully design a working solution to the problem, an understanding
+of the available tools found mainly in the vfs layer was required.
 
 In order to form the bridge between userland and kernel space, the
 system calls from the user must be captured by trapframes and delegated
@@ -11,17 +11,17 @@ the interaction between the user input and the virtual file system must
 be carefully managed. The first is retrieving the parameters passed
 in from the user. An important note here is that some parameters are
 32bit and others 64bit, requiring us to carefully access each. There
-are also buffer references passed in, whose locations are actually
-in userspace. This too require care when dealing with them, requiring
-copyin/copyout calls to move data between the kernel and userland, as
-well as careful configuration of the vfs layer operations. To succesfully
-manage the file system calls, a file descriptor table is maintained for
-each thread. This is opposed to being a global array, allowing us to
-keep track of which files are opened in each process.
+are also buffer references passed in, whose locations are actually in
+userspace. This too require care when dealing with them, requiring
+copyin/copyout calls to move data between the kernel and userland,
+as well as careful configuration of the vfs layer operations. To
+successfully manage the file system calls, a file descriptor table is
+maintained for each thread. This is opposed to being a global array,
+allowing us to keep track of which files are opened in each process.
 
 The file descriptor tables contain file descriptors. These represent the
 files, storing important information such as the respective modes under
-which the files were opend - read only, write only or read write. These
+which the files were opened - read only, write only or read write. These
 are also used to keep track of how many references there are to an
 open file descriptor. This is used to to know when it is safe to close
 a file, especially after a dup2 operation is performed. A reference
@@ -66,7 +66,7 @@ vfs or VOP calls. For reading, the flags are checked to ensure the file
 descriptor has been opened for read only or read and write and likewise
 writing checks that the file is opened for write only and read and write,
 throwing an EINVAL if the desired condition is not satisfied. Any kind
-of memory allocation performed in the kernal (kmalloc) is immediately
+of memory allocation performed in the kernel (kmalloc) is immediately
 checked for NULL and throws an ENOMEM should no memory be granted to
 the required item. Open performs additional checks for flags such that
 no invalid state can be achieved such as a read only and a write only
@@ -82,7 +82,7 @@ way to ensure uniqueness. An id cannot be allocated if it is already in
 used by an open file in the specific process file descriptor table. The
 allocation of id’s is handled through the use of a previous_fd variable
 in each thread, which tracks the previously allocated descriptor. If
-a file descriptor is freed, and it is lower then the previoud_fd,
+a file descriptor is freed, and it is lower than the previoud_fd,
 then the previous_fd is updated to that fd_id. This allows us to always
 allocate the smallest available id. In order to find the next available,
 we search the file descriptor table from left to right, starting from
@@ -93,3 +93,80 @@ file descriptor table each time. The file descriptor table is full,
 i.e. has OPEN_MAX file descriptors in it, when we cannot find a NULL
 index when we search from previous_fd onwards.
 
+Advanced Part Having implemented the file system calls with thread
+safety in mind, the next step was to implement fork. The idea with
+fork is that the new thread had to receive most of the old thread’s
+state. For example, the new threads file descriptor table had to be the
+same as the old ones. And more, the file descriptors needed to be the
+same references. This made a fork act like a dup2 on these descriptors,
+that way both threads shared the offset pointers in files, incremented
+the refcounts and had the same reference to the vnode.
+
+The next thing we looked at was the actual forking. So in our
+implementation of fork we allocated a new trapframe to which we copied
+the old threads trapframe to. This was done here to avoid the old thread
+changing the trapframe when it continued execution. We created a new proc
+struct using proc_create_runprogram, and we also made a copy of the old
+threads address space using as_copy. It was apparent that thread_fork
+contained much of the initialisation logic required for forking, so we
+used it to do the work for us. We modified thread_fork to copy the old
+threads file descriptor table as discussed above. We also passed the new
+process struct, copy of the address space and the copy of the trapframe
+as the parameters to thread_fork. We then proceeded onto the tricky part,
+the entrypoint. We used the enter_forked_process stub in syscall.c as our
+entry point function, and passed in the copies of the address space and
+trapframe. It was important that the trapframe was on the stack of the new
+thread, so we defined a static struct trapframe and copied the trapframe
+passed in to this and freed the old one. We then set the address space
+and activated it as required, and set the appropriate return values and
+program counter variables in the trapframe. We then called mips_usermode
+to handle taking the thread back to userland to continue.
+
+Next step was to implement all PID related functions, getpid(), waitpid()
+and exit(). In order to tackle these problems the very first task is
+to create some data structure which will be able to delegate and take
+back PIDs as required. A simple global array of processes performed
+this task sufficiently. We wrapped up the given struct proc in our own
+struct process for bookkeeping like storing the exitcode, exit status
+and holding on to the condition variable used to synchronise between the
+parent and the child during exit. Two fields were added to struct proc,
+pid and parent_pid to make it easy to obtain a reference to the process
+from our array, and to check if we have a parent respectively.
+
+For getpid() to be the trivial implementation it is, the next free PID is
+assigned to the proc during proc_create and if there is no more available
+processes we simply free all allocated information and return with an
+error. On exit or fatal we free up the process from the relevant slot
+after the proc and thread are both in a destroyed or zombie state. Getpid
+can now simply call curthread->t_proc->pid to retrieve the appropriate
+value.
+
+Waitpid and exit were far more trickier. In order for these two functions
+to interact with one another, from parent to child, we needed some way
+for them to synchronise in a concurrent environment. The core of both
+functions were not too complex. Waitpid checked if the appropriate PID
+and options were passed in. Since our implementation did not handle any
+of the option flags we simply checked if none of the flags were passed
+in. For PID, it had to be between 0 and PROC_MAX. The status was also
+checked for validity by attempting to copyout to it, if it failed then
+we return with the exit code provided. On a valid pass, if the child had
+already exited, waitpid would have the parent collect the exit code of
+the child, remove the child from the process table and free the proc and
+process structs then return with the pid of the child after populating the
+status pointer. If the child has not already exited, then the parent who
+called waitpid will hang indefinitely using a condition variable until
+the child calls exit and signals to the parent that it can collect all
+the necessary information, clean up and return.
+
+By that logic exit is much simpler than waitpid, its job is set its exit
+code with _MKWAIT_EXIT, indicate that it has exited, use the condition
+variable to signal the parent that it has exited, regardless of whether
+or not the parent is waiting for the child, destroy the process and
+thread_exit.
+
+Kill_curthread is trivial, it is by nature quite similar to what has to
+be done when an exit call is made, except we do not care about notifying
+our parent or anything since it can no longer be trusted. After the
+error codes are interpreted, kill_curthread simply destroys the proc,
+removes the process from our global pid array and exits the thread,
+effectively leaving it in a zombie state for later clean up.
