@@ -49,7 +49,7 @@
 #include <addrspace.h>
 #include <vnode.h>
 
-#define PROC_MAX 32
+#define PROC_MAX 64
 
 /*
  * The process for the kernel; this holds all the kernel-only threads.
@@ -139,6 +139,7 @@ proc_create(const char *name)
 	proc->parent_pid = UNASSIGNED;
 	process->exit_cv = cv_create("exit_cv");
 	process->exited = false;
+	process->waitcount = 0;
 //	process->exit_lock = lock_create("exit_lock");
 
 	threadarray_init(&proc->p_threads);

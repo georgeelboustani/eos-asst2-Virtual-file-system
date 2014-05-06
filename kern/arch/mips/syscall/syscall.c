@@ -113,6 +113,10 @@ syscall(struct trapframe *tf)
 	        	err = sys_reboot(tf->tf_a0);
 		break;
 
+		case SYS__exit:
+			myexit((int)tf->tf_a0);
+			break;
+
 	        case SYS_open:
 			val = myopen((const_userptr_t)tf->tf_a0, (int)tf->tf_a1);
 			err = val.errno;
@@ -192,12 +196,6 @@ syscall(struct trapframe *tf)
 			if (val.errno == NO_ERROR) {
 				retval_h = (pid_t) val.val_h;
 			}
-			break;
-
-		case SYS__exit:
-			myexit((int)tf->tf_a0);
-//			err = NO_ERROR;
-//			retval_h = (pid_t) 0;
 			break;
 
 		case SYS___time:

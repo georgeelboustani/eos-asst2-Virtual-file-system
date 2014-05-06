@@ -219,7 +219,6 @@ main(int argc, char * argv[])
 //			}
 			printf("* Attempting to exit now\n");
 			exit(0);
-			assert(0);
 		} else {
 			printf("* Forked, in parent\n");
 			parent = getpid();
@@ -232,6 +231,5 @@ main(int argc, char * argv[])
 	}
 	printf("parent pid: %d, child pid: %d\n", parent, child);
 
-	assert(0);
 	return 0;
 }

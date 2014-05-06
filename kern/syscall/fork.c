@@ -113,7 +113,10 @@ struct retval mywaitpid(pid_t proc_id, int *status, int options) {
 		return rv;
 	}
 
-	cv_wait(child_proc->exit_cv, get_pid_table_lock());
+	child_proc->waitcount++;
+	while(!child_proc->exited) {
+		cv_wait(child_proc->exit_cv, get_pid_table_lock());
+	}
 
 	*status = child_proc->exitcode;
 	int result = copyout(&child_proc->exitcode, (userptr_t)status, sizeof(int));
@@ -121,9 +124,13 @@ struct retval mywaitpid(pid_t proc_id, int *status, int options) {
 		rv.errno = result;
 		return rv;
 	}
-	rv.val_h = (pid_t*) child_proc->proc->pid;
-	remove_process_by_id(child_proc->proc->pid);
+
+	child_proc->waitcount--;
+	cv_signal(child_proc->exit_cv, get_pid_table_lock());
 	lock_release(get_pid_table_lock());
+
+	rv.val_h = (pid_t*) proc_id;
+	remove_process_by_id(proc_id);
 
 	return rv;
 }
@@ -141,11 +148,16 @@ void myexit(int exitcode) {
 		proc->exitcode = _MKWAIT_EXIT(exitcode);
 		proc->exited = true;
 	}
-	lock_release(get_pid_table_lock());
 	cv_signal(proc->exit_cv, get_pid_table_lock());
+
+	if (proc->waitcount > 0) {
+		cv_wait(proc->exit_cv, get_pid_table_lock());
+	}
 
 	struct proc* cur_proc = curthread->t_proc;
 	proc_remthread(curthread);
 	proc_destroy(cur_proc);
+	lock_release(get_pid_table_lock());
+
 	thread_exit();
 }

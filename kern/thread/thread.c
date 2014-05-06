@@ -50,6 +50,7 @@
 #include <addrspace.h>
 #include <mainbus.h>
 #include <vnode.h>
+#include <vfs.h>
 
 
 /* Magic number used as a guard value on kernel thread stacks. */
@@ -281,7 +282,15 @@ thread_destroy(struct thread *thread)
 	while (i < OPEN_MAX) {
 		struct file_descriptor* fd = thread->file_descriptors[i];
 		if (fd != NULL) {
-			myclose(i);
+			lock_acquire(fd->lock);
+			if (fd->ref_count == 0) {
+				vfs_close(fd->vnode);
+				lock_release(fd->lock);
+				lock_destroy(fd->lock);
+			} else {
+				fd->ref_count--;
+				lock_release(fd->lock);
+			}
 		}
 		i++;
 	}

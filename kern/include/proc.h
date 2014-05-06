@@ -70,6 +70,8 @@ struct process {
 	struct cv* exit_cv;		/* cv for used for waitpid and exit */
 	struct proc* proc;
 	bool exited;
+
+	int waitcount;
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */
