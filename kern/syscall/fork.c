@@ -80,9 +80,7 @@ struct retval mywaitpid(pid_t proc_id, int *status, int options) {
 	}
 
 	lock_acquire(get_pid_table_lock());
-
 	struct process *child_proc = get_process_by_id(proc_id);
-
 	if (child_proc == NULL) {
 		lock_release(get_pid_table_lock());
 		rv.errno = ESRCH;
@@ -95,10 +93,6 @@ struct retval mywaitpid(pid_t proc_id, int *status, int options) {
 		rv.errno = ECHILD;
 		return rv;
 	}
-
-//	if (child_proc->exitcode == __WEXITED || child_proc->exitcode == __WCORED ||
-//			child_proc->exitcode == __WSIGNALED || child_proc->exitcode == __WSTOPPED) {
-//		lock_destroy(child_proc->exit_lock);
 
 	if (child_proc->exited) {
 		int result = remove_process_by_id(proc_id);
@@ -113,10 +107,7 @@ struct retval mywaitpid(pid_t proc_id, int *status, int options) {
 		return rv;
 	}
 
-	child_proc->waitcount++;
-	while(!child_proc->exited) {
-		cv_wait(child_proc->exit_cv, get_pid_table_lock());
-	}
+	cv_wait(child_proc->exit_cv, get_pid_table_lock());
 
 	*status = child_proc->exitcode;
 	int result = copyout(&child_proc->exitcode, (userptr_t)status, sizeof(int));
@@ -124,9 +115,6 @@ struct retval mywaitpid(pid_t proc_id, int *status, int options) {
 		rv.errno = result;
 		return rv;
 	}
-
-	child_proc->waitcount--;
-	cv_signal(child_proc->exit_cv, get_pid_table_lock());
 	lock_release(get_pid_table_lock());
 
 	rv.val_h = (pid_t*) proc_id;
@@ -149,10 +137,6 @@ void myexit(int exitcode) {
 		proc->exited = true;
 	}
 	cv_signal(proc->exit_cv, get_pid_table_lock());
-
-	if (proc->waitcount > 0) {
-		cv_wait(proc->exit_cv, get_pid_table_lock());
-	}
 
 	struct proc* cur_proc = curthread->t_proc;
 	proc_remthread(curthread);

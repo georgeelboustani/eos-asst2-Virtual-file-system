@@ -81,6 +81,8 @@ int remove_process_by_id(pid_t proc_id) {
 	struct process* proc = pid_table[proc_id];
 
 	cv_destroy(proc->exit_cv);
+	kfree(proc->proc->p_name);
+	kfree(proc->proc);
 	kfree(proc);
 
 	return 0;
@@ -133,6 +135,7 @@ proc_create(const char *name)
 	if (proc->pid == UNASSIGNED) {
 		kfree(proc->p_name);
 		kfree(proc);
+		kfree(process);
 		panic("Could not assign a PID to this process\n");
 	}
 
@@ -237,8 +240,8 @@ proc_destroy(struct proc *proc)
 	threadarray_cleanup(&proc->p_threads);
 	spinlock_cleanup(&proc->p_lock);
 
-	kfree(proc->p_name);
-	kfree(proc);
+//	kfree(proc->p_name);
+//	kfree(proc);
 }
 
 /*
