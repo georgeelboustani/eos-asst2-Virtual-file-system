@@ -68,9 +68,8 @@ struct process {
 	int exitcode;			/* exit code of the process */
 
 	struct cv* exit_cv;		/* cv for used for waitpid and exit */
-//	struct lock* exit_lock;		/* lock used for waitpid and exit */
 	struct proc* proc;
-//	struct thread* thread;		/* thread attached to process */
+	bool exited;
 };
 
 /* This is the process structure for the kernel and for kernel-only threads. */

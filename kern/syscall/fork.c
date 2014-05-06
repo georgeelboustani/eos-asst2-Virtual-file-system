@@ -45,8 +45,9 @@ struct retval myfork(struct trapframe *tf) {
 		return rv;
 	}
 
-	char dest;
-	result = thread_fork(strcat(strcpy(&dest, curthread->t_name), "_child"), new_proc, (void*)&enter_forked_process, (void *)new_tf, (unsigned long) new_as);
+//	char dest;
+//	strcat(strcpy(&dest, curthread->t_name), "_child")
+	result = thread_fork("child", new_proc, (void*)&enter_forked_process, (void *)new_tf, (unsigned long) new_as);
 	if (result) {
 		kfree(new_tf);
 		as_destroy(new_as);
@@ -95,10 +96,11 @@ struct retval mywaitpid(pid_t proc_id, int *status, int options) {
 		return rv;
 	}
 
-	if (child_proc->exitcode == __WEXITED || child_proc->exitcode == __WCORED ||
-			child_proc->exitcode == __WSIGNALED || child_proc->exitcode == __WSTOPPED) {
+//	if (child_proc->exitcode == __WEXITED || child_proc->exitcode == __WCORED ||
+//			child_proc->exitcode == __WSIGNALED || child_proc->exitcode == __WSTOPPED) {
 //		lock_destroy(child_proc->exit_lock);
 
+	if (child_proc->exited) {
 		int result = remove_process_by_id(proc_id);
 		if (result != NO_ERROR) {
 			rv.val_h = (int*) result;
@@ -111,9 +113,6 @@ struct retval mywaitpid(pid_t proc_id, int *status, int options) {
 		return rv;
 	}
 
-	lock_release(get_pid_table_lock());
-
-	lock_acquire(get_pid_table_lock());
 	cv_wait(child_proc->exit_cv, get_pid_table_lock());
 
 	*status = child_proc->exitcode;
@@ -126,12 +125,10 @@ struct retval mywaitpid(pid_t proc_id, int *status, int options) {
 	remove_process_by_id(child_proc->proc->pid);
 	lock_release(get_pid_table_lock());
 
-//	lock_destroy(child_proc->exit_lock);
-
 	return rv;
 }
 
-struct retval myexit(int exitcode) {
+void myexit(int exitcode) {
 	struct retval rv;
 	rv.errno = NO_ERROR;
 	rv.val_h = (int*)-1;
@@ -142,13 +139,13 @@ struct retval myexit(int exitcode) {
 	if (proc->proc->parent_pid != UNASSIGNED) {
 		// Indicate that we've exited.
 		proc->exitcode = _MKWAIT_EXIT(exitcode);
-		cv_signal(proc->exit_cv, get_pid_table_lock());
+		proc->exited = true;
 	}
+	lock_release(get_pid_table_lock());
+	cv_signal(proc->exit_cv, get_pid_table_lock());
+
 	struct proc* cur_proc = curthread->t_proc;
 	proc_remthread(curthread);
 	proc_destroy(cur_proc);
-	lock_release(get_pid_table_lock());
 	thread_exit();
-
-	return rv;
 }

@@ -195,8 +195,9 @@ syscall(struct trapframe *tf)
 			break;
 
 		case SYS__exit:
-			val = myexit((int)tf->tf_a0);
-			err = val.errno;
+			myexit((int)tf->tf_a0);
+//			err = NO_ERROR;
+//			retval_h = (pid_t) 0;
 			break;
 
 		case SYS___time:

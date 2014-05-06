@@ -42,6 +42,6 @@ struct trapframe;
 struct retval myfork(struct trapframe *tf);
 struct retval mygetpid(void);
 struct retval mywaitpid(pid_t pid, int *status, int options);
-struct retval myexit(int exitcode);
+void myexit(int exitcode);
 
 #endif /* _FILE_H_ */

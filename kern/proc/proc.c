@@ -138,6 +138,7 @@ proc_create(const char *name)
 
 	proc->parent_pid = UNASSIGNED;
 	process->exit_cv = cv_create("exit_cv");
+	process->exited = false;
 //	process->exit_lock = lock_create("exit_lock");
 
 	threadarray_init(&proc->p_threads);

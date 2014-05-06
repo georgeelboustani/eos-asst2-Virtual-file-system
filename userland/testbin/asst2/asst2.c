@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <err.h>
 #include <errno.h>
+#include <assert.h>
 
 #define MAX_BUF 500
 char teststr[] = "The quick brown fox jumped over the lazy dog.";
@@ -210,12 +211,15 @@ main(int argc, char * argv[])
 		if (childID == 0) {
 			printf("* Forked, in child\n");
 			child = getpid();
-			printf("* Exiting child\n");
+			printf("* Child pid according to child is: %d\n", child);
 //			int i = 0;
-//			while (i < 2000000000) {
+//			while (i < 1000) {
+//				printf("* Delaying parent\n");
 //				i++;
 //			}
+			printf("* Attempting to exit now\n");
 			exit(0);
+			assert(0);
 		} else {
 			printf("* Forked, in parent\n");
 			parent = getpid();
@@ -228,5 +232,6 @@ main(int argc, char * argv[])
 	}
 	printf("parent pid: %d, child pid: %d\n", parent, child);
 
+	assert(0);
 	return 0;
 }

@@ -835,10 +835,6 @@ thread_exit(void)
 
 	cur = curthread;
 
-	if (cur->t_proc == kproc) {
-		proc_remthread(cur);
-	}
-
 	/* Make sure we *are* detached (move this only if you're sure!) */
 	KASSERT(cur->t_proc == NULL);
 
